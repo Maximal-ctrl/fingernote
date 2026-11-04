@@ -32,6 +32,18 @@ Gefunden durch die e2e-Suite (Build ab 286e626, Chromium 1440 px und Pixel 7). A
 - Severity: S4 · Screens S01, S03
 - Status: fixed in 99e84d5, axe-Scan in F01-H1, F07-H1, M-H1
 
+### BUG-006: Striche unsichtbar nach Seitenwechsel und beim ersten Öffnen auf dem Handy
+- Severity: S2 · Flow F02 / F02-E4 · Screen S04 · gefunden im Sichtcheck (Dev-Server, React StrictMode)
+- Steps: Seite mit Strichen öffnen → andere Seite → zurück
+- Expected: Striche sichtbar
+- Actual: Zeichenebene leer (Daten waren gespeichert, nur nicht gezeichnet)
+- Cause: abgebrochener Animations-Frame blieb als „unterwegs“ markiert, danach wurde nie mehr gezeichnet
+- Status: fixed in 234e318, Test F02-E4 (prüft Pixel auf der Zeichenebene)
+
+### BUG-007: Mobile Werkzeugleiste: Rückgängig/Wiederholen liegen über Fett/Kursiv
+- Severity: S3 · Screen S05 · 390 px
+- Status: fixed in 234e318 (Leiste scrollt seitlich statt zu überlappen), Screenshot replica/clone-screens/S04-mobile.png
+
 ## To check (nicht reproduziert / bekannte Grenzen)
 
 - Zwei Tabs auf derselben Seite: der zuletzt speichernde Tab gewinnt pro Block/Strich (kein Live-Abgleich zwischen Tabs).
