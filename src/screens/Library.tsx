@@ -10,6 +10,8 @@ import { PdfImportModal } from './PdfImportModal';
 import { COVER_COLORS } from '../lib/palette';
 import { shortDateFmt } from '../lib/text';
 import { LogoMark } from '../ui/Logo';
+import { seedExample } from '../db/seed';
+import { navigate, pagePath } from '../lib/router';
 
 export function Library() {
   const notebooks = useLiveQuery(() => db.notebooks.orderBy('sortOrder').toArray(), []);
@@ -95,6 +97,7 @@ export function Library() {
               <Button variant="primary" onClick={() => setCreating(true)}><Plus size={16} aria-hidden /> Notizbuch anlegen</Button>
               <Button onClick={() => setImporting(true)}><FileUp size={16} aria-hidden /> PDF öffnen</Button>
             </div>
+            <Button variant="ghost" size="sm" onClick={async () => { const r = await seedExample(); navigate(pagePath(r.notebookId, r.pageId)); }}>Beispiel-Notizbuch ansehen</Button>
           </section>
         ) : (
           <>

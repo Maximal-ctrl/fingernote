@@ -17,6 +17,7 @@ export async function importPdf(
   if (file.type && file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
     throw new PdfImportError('Das ist keine PDF-Datei.');
   }
+  if (file.size > 300 * 1024 * 1024) throw new PdfImportError('Die PDF ist größer als 300 MB.');
   const bytes = await file.arrayBuffer();
   let doc;
   try {

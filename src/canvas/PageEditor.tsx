@@ -612,6 +612,10 @@ export function PageEditor({ page, notebook, q }: { page: Page; notebook: Notebo
       toast('Das ist kein Bild.', 'error');
       return;
     }
+    if (file.size > 25 * 1024 * 1024) {
+      toast('Bilder bis 25 MB, bitte verkleinern.', 'error');
+      return;
+    }
     let w = 400, h = 300;
     try {
       const bmp = await createImageBitmap(file);
