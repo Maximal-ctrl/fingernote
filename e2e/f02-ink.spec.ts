@@ -59,4 +59,21 @@ test.describe('F02 Handschrift', () => {
     await draw(page, line(250, 260, 250, 340));
     expect(await count(page, 'strokes')).toBe(0);
   });
+
+  test('F02-E4 Striche sind nach Seitenwechsel sichtbar (Canvas hat Pixel)', async ({ page }) => {
+    await newNotebook(page);
+    await page.keyboard.press('p');
+    await draw(page, line(100, 400, 400, 450));
+    await page.getByRole('button', { name: 'Seite', exact: true }).click();
+    await page.getByRole('button', { name: /^Unbenannte Seite/ }).first().click();
+    await page.waitForTimeout(600);
+    const pixels = await page.evaluate(() => {
+      const c = document.querySelectorAll('canvas')[1] as HTMLCanvasElement;
+      const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i]) n++;
+      return n;
+    });
+    expect(pixels).toBeGreaterThan(100);
+  });
 });

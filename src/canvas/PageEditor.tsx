@@ -288,7 +288,13 @@ export function PageEditor({ page, notebook, q }: { page: Page; notebook: Notebo
   }, [view]);
 
   useLayoutEffect(() => { requestDraw(true); }, [doc, zoom, stage, drag, pageH, pageLeft, requestDraw]);
-  useEffect(() => () => cancelAnimationFrame(raf.current), []);
+  useEffect(() => {
+    requestDraw(true);
+    return () => {
+      cancelAnimationFrame(raf.current);
+      raf.current = 0; // sonst glaubt requestDraw, ein Frame sei noch unterwegs
+    };
+  }, [requestDraw]);
 
   const toPage = useCallback((e: { clientX: number; clientY: number }): Pt => {
     const r = pageRef.current!.getBoundingClientRect();

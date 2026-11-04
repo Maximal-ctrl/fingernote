@@ -206,6 +206,7 @@ kbd {
 .tool-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-kbd { margin-left: auto; }
 @media (min-width: 601px) { .toolbar { flex-wrap: wrap; overflow-x: visible; } }
+@media (max-width: 600px) { .tool-options, .tool-right { flex: none; } .tool-right { margin-left: 0; } }
 .tool-right { margin-left: auto; }
 .tool-sep { width: 1px; height: 24px; background: var(--border); flex: none; margin: 0 var(--s-1); }
 .tool-sep.thin { margin: 0 2px; }
