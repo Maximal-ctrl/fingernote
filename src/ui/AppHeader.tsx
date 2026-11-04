@@ -8,7 +8,7 @@ export function AppHeader({ left, right }: { left?: ReactNode; right?: ReactNode
   return (
     <header className="app-header">
       <div className="app-header-left">{left ?? <Logo />}</div>
-      <button type="button" className="search-trigger" onClick={() => ui.set({ panel: 'search' })} aria-label="Alle Notizen durchsuchen">
+      <button type="button" className="search-trigger" onClick={() => ui.set({ panel: 'search' })} title="Alle Notizen durchsuchen (Strg F)">
         <Search size={16} aria-hidden />
         <span>Suchen</span>
         <kbd>Strg F</kbd>

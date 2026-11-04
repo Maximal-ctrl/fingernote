@@ -53,17 +53,25 @@ export function NotebookView({ notebookId, pageId, q }: { notebookId: string; pa
   const section = sections?.find((s) => s.id === sectionId);
   const pages = useMemo(() => (allPages ?? []).filter((p) => p.sectionId === sectionId), [allPages, sectionId]);
 
-  // Ungültige oder fehlende Seite → erste Seite des Abschnitts
+  // Ungültige oder fehlende Seite → erste Seite des Abschnitts.
+  // Eine gerade angelegte Seite fehlt evtl. noch in der Live-Abfrage, deshalb erst in der DB nachsehen.
   useEffect(() => {
     if (!allPages || !sections) return;
     if (page) {
       lastPageOfSection.set(page.sectionId, page.id);
-      if (selectedSection !== page.sectionId) setSelectedSection(page.sectionId);
       return;
     }
-    const target = pages[0];
-    if (target) navigate(pagePath(notebookId, target.id), true);
-  }, [allPages, sections, page, pages, notebookId, selectedSection]);
+    let live = true;
+    void (async () => {
+      if (pageId) {
+        const p = await db.pages.get(pageId);
+        if (p && !p.deletedAt && p.notebookId === notebookId) return;
+      }
+      const target = pages[0];
+      if (live && target) navigate(pagePath(notebookId, target.id), true);
+    })();
+    return () => { live = false; };
+  }, [allPages, sections, page, pages, pageId, notebookId]);
 
   // Alt+N: neue Seite
   useEffect(() => {
@@ -317,11 +325,11 @@ function SortableList<T extends { id: string }>({ items, render, onReorder, onDr
   const [over, setOver] = useState<{ id: string; pos: 'before' | 'after' | 'into' } | null>(null);
   const dragId = useRef<string | null>(null);
   return (
-    <ul className="sortable" role={dragType === 'section' ? 'tablist' : 'list'} aria-orientation="vertical">
+    <ul className="sortable" role={dragType === 'section' ? 'tablist' : undefined} aria-orientation={dragType === 'section' ? 'vertical' : undefined}>
       {items.map((item) => (
         <li
           key={item.id}
-          role="presentation"
+          role={dragType === 'section' ? 'presentation' : undefined}
           draggable
           className={over?.id === item.id ? `drop-${over.pos}` : ''}
           onDragStart={(e) => {

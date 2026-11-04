@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, type ReactNode, type ButtonHTMLAttributes } from 'react';
+import { useEffect, useId, useRef, useState, useCallback, type ReactNode, type ButtonHTMLAttributes } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
@@ -28,6 +28,9 @@ export function IconButton({ label, active, className = '', children, shortcut, 
 
 export function Modal({ title, onClose, children, footer, size = 'md' }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; size?: 'sm' | 'md' | 'lg' }) {
   const ref = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     const el = ref.current!;
@@ -35,8 +38,11 @@ export function Modal({ title, onClose, children, footer, size = 'md' }: { title
     (first ?? el).focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // nur der oberste Dialog reagiert
+        const all = document.querySelectorAll('.modal');
+        if (all[all.length - 1] !== el) return;
         e.stopPropagation();
-        onClose();
+        closeRef.current();
       }
       if (e.key === 'Tab') {
         const items = Array.from(el.querySelectorAll<HTMLElement>('button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])')).filter((x) => !x.hasAttribute('disabled'));
@@ -51,12 +57,12 @@ export function Modal({ title, onClose, children, footer, size = 'md' }: { title
       document.removeEventListener('keydown', onKey, true);
       prev?.focus?.();
     };
-  }, [onClose]);
+  }, []);
   return createPortal(
     <div className="overlay" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal modal-${size}`} role="dialog" aria-modal="true" aria-labelledby="modal-title" ref={ref} tabIndex={-1}>
+      <div className={`modal modal-${size}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={ref} tabIndex={-1}>
         <header className="modal-head">
-          <h2 id="modal-title">{title}</h2>
+          <h2 id={titleId}>{title}</h2>
           <IconButton label="Schließen" className="modal-close" onClick={onClose}><X size={18} /></IconButton>
         </header>
         <div className="modal-body">{children}</div>

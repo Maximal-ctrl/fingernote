@@ -322,3 +322,32 @@ export async function toggleTagDone(blockId: string, index: number) {
   await db.blocks.update(blockId, { html: root.innerHTML });
   window.dispatchEvent(new CustomEvent('fn:external-change', { detail: { pageId: block.pageId } }));
 }
+
+/* ---------- Notfall-Kopie beim Schließen ---------- */
+
+export type ContentChange = { putBlocks: Block[]; delBlocks: string[]; putStrokes: Stroke[]; delStrokes: string[] };
+const PENDING = 'fingernote:pending:';
+
+/** Synchron (localStorage), damit es auch beim Schließen des Tabs sicher geschrieben ist. */
+export function stashPending(pageId: string, changes: ContentChange[]) {
+  try {
+    if (changes.length) localStorage.setItem(PENDING + pageId, JSON.stringify(changes));
+    else localStorage.removeItem(PENDING + pageId);
+  } catch { /* Speicher voll oder gesperrt */ }
+}
+
+/** Beim Start: nicht fertig gespeicherte Änderungen nachholen (idempotent, ganze Objekte). */
+export async function recoverPending() {
+  let keys: string[] = [];
+  try { keys = Object.keys(localStorage).filter((k) => k.startsWith(PENDING)); } catch { return; }
+  for (const key of keys) {
+    try {
+      const changes = JSON.parse(localStorage.getItem(key) || '[]') as ContentChange[];
+      const pageId = key.slice(PENDING.length);
+      if (await db.pages.get(pageId)) for (const c of changes) await savePageContent(pageId, c);
+      localStorage.removeItem(key);
+    } catch (e) {
+      console.warn('Wiederherstellung fehlgeschlagen', e);
+    }
+  }
+}

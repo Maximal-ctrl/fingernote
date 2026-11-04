@@ -16,6 +16,7 @@ const GROUPS: { id: TagKind; label: string; icon: React.ReactNode }[] = [
 export function TagsPanel({ onClose }: { onClose: () => void }) {
   const [tags, setTags] = useState<TagHit[] | null>(null);
   const [openOnly, setOpenOnly] = useState(true);
+  const [keep, setKeep] = useState(() => new Set<string>()); // in dieser Sitzung abgehakt: bleibt sichtbar
 
   const reload = async () => {
     await flushAll();
@@ -23,7 +24,7 @@ export function TagsPanel({ onClose }: { onClose: () => void }) {
   };
   useEffect(() => { void reload(); }, []);
 
-  const shown = (tags ?? []).filter((t) => !(openOnly && t.tag === 'todo' && t.done));
+  const shown = (tags ?? []).filter((t) => !(openOnly && t.tag === 'todo' && t.done && !keep.has(`${t.block.id}-${t.index}`)));
 
   return (
     <Modal title="Tags" onClose={onClose} size="lg">
@@ -50,7 +51,11 @@ export function TagsPanel({ onClose }: { onClose: () => void }) {
                         type="checkbox"
                         checked={t.done}
                         aria-label={`${t.text} erledigt`}
-                        onChange={async () => { await toggleTagDone(t.block.id, t.index); await reload(); }}
+                        onChange={async () => {
+                          setKeep((k) => new Set(k).add(`${t.block.id}-${t.index}`));
+                          setTags((xs) => xs && xs.map((x) => (x === t ? { ...x, done: !x.done } : x)));
+                          await toggleTagDone(t.block.id, t.index);
+                        }}
                       />
                     )}
                     <button type="button" className={`tag-link ${t.done ? 'is-done' : ''}`} onClick={() => { onClose(); navigate(pagePath(t.page.notebookId, t.page.id)); }}>

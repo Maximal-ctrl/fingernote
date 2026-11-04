@@ -39,7 +39,7 @@ export function TrashPanel({ onClose }: { onClose: () => void }) {
               </div>
               <div className="row gap-4">
                 <Button size="sm" onClick={async () => { await restorePage(page.id); toast('Seite wiederhergestellt.'); }}><RotateCcw size={15} aria-hidden /> Wiederherstellen</Button>
-                <IconButton label="Endgültig löschen" onClick={() => purgePage(page.id)}><Trash2 size={16} /></IconButton>
+                <IconButton label={`„${pageTitle(page.title)}“ endgültig löschen`} onClick={() => purgePage(page.id)}><Trash2 size={16} /></IconButton>
               </div>
             </li>
           ))}

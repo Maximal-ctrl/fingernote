@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Copy, Trash2 } from 'lucide-react';
 import { PAGE_MIN_H, PAGE_W, type Block, type Notebook, type Page, type Paper, type Stroke } from '../db/db';
-import { addAsset, loadPageContent, savePageContent, trashPage, updateNotebook, updatePage } from '../db/repo';
+import { addAsset, loadPageContent, savePageContent, stashPending, trashPage, updateNotebook, updatePage, type ContentChange } from '../db/repo';
 import { settings } from '../lib/store';
 import { uid } from '../lib/ids';
 import { htmlToText, dateFmt, timeFmt } from '../lib/text';
@@ -46,10 +46,12 @@ export function PageEditor({ page, notebook, q }: { page: Page; notebook: Notebo
   const saved = useRef({ blocks: new Map<string, Block>(), strokes: new Map<string, Stroke>() });
   const saveTimer = useRef<number | undefined>(undefined);
 
-  const flush = useCallback(async () => {
-    window.clearTimeout(saveTimer.current);
+  const inflight = useRef<ContentChange[]>([]);
+
+  /** Nimmt alle ungespeicherten Änderungen als Diff und markiert sie als gespeichert. */
+  const takeChange = useCallback((): ContentChange | null => {
     const d = docRef.current;
-    if (!d) return;
+    if (!d) return null;
     const s = saved.current;
     const putBlocks = d.blocks.filter((b) => s.blocks.get(b.id) !== b);
     const putStrokes = d.strokes.filter((x) => s.strokes.get(x.id) !== x);
@@ -57,21 +59,40 @@ export function PageEditor({ page, notebook, q }: { page: Page; notebook: Notebo
     const liveS = new Set(d.strokes.map((x) => x.id));
     const delBlocks = [...s.blocks.keys()].filter((id) => !liveB.has(id));
     const delStrokes = [...s.strokes.keys()].filter((id) => !liveS.has(id));
-    if (!putBlocks.length && !putStrokes.length && !delBlocks.length && !delStrokes.length) return;
+    if (!putBlocks.length && !putStrokes.length && !delBlocks.length && !delStrokes.length) return null;
     saved.current = { blocks: new Map(d.blocks.map((b) => [b.id, b])), strokes: new Map(d.strokes.map((x) => [x.id, x])) };
+    return { putBlocks, delBlocks, putStrokes, delStrokes };
+  }, []);
+
+  const flush = useCallback(async () => {
+    window.clearTimeout(saveTimer.current);
+    const change = takeChange();
+    if (!change) return;
+    inflight.current.push(change);
     try {
-      await savePageContent(page.id, { putBlocks, delBlocks, putStrokes, delStrokes });
+      await savePageContent(page.id, change);
     } catch (e) {
       console.error(e);
       toast('Speichern fehlgeschlagen. Ist der Speicher voll?', 'error');
+      return;
     }
-  }, [page.id]);
+    inflight.current = inflight.current.filter((c) => c !== change);
+    if (!inflight.current.length) stashPending(page.id, []);
+  }, [page.id, takeChange]);
+
+  /** Tab wird geschlossen/neu geladen: alles Offene synchron sichern, beim nächsten Start nachholen. */
+  const stash = useCallback(() => {
+    const change = takeChange();
+    if (change) inflight.current.push(change);
+    stashPending(page.id, inflight.current);
+    if (change) void savePageContent(page.id, change);
+  }, [page.id, takeChange]);
 
   const setDoc = useCallback((d: Doc) => {
     docRef.current = d;
     setDocState(d);
     window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => void flush(), 400);
+    saveTimer.current = window.setTimeout(() => void flush(), 250);
   }, [flush]);
 
   const commit = useCallback((next: Doc, prev: Doc = docRef.current!) => {
@@ -81,7 +102,9 @@ export function PageEditor({ page, notebook, q }: { page: Page; notebook: Notebo
     h.future = [];
     setDoc(next);
     bump();
-  }, [setDoc]);
+    window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => void flush(), 60);
+  }, [setDoc, flush]);
 
   const [sel, setSel] = useState<Sel | null>(null);
 
@@ -123,16 +146,16 @@ export function PageEditor({ page, notebook, q }: { page: Page; notebook: Notebo
       }
     };
     document.addEventListener('visibilitychange', onHide);
-    window.addEventListener('pagehide', flush);
+    window.addEventListener('pagehide', stash);
     window.addEventListener('fn:external-change', onExternal);
     return () => {
       void flush();
       flushers.delete(flush);
       document.removeEventListener('visibilitychange', onHide);
-      window.removeEventListener('pagehide', flush);
+      window.removeEventListener('pagehide', stash);
       window.removeEventListener('fn:external-change', onExternal);
     };
-  }, [page.id, load, flush]);
+  }, [page.id, load, flush, stash]);
 
   /* ---------- Layout, Zoom ---------- */
 
@@ -593,7 +616,8 @@ export function PageEditor({ page, notebook, q }: { page: Page; notebook: Notebo
       hist.current.future = [];
       bump();
     }
-  }, [commit, setDoc]);
+    void flush();
+  }, [commit, setDoc, flush]);
 
   const deleteBlock = useCallback((id: string) => {
     focusSnap.current = null;
@@ -809,7 +833,7 @@ export function PageEditor({ page, notebook, q }: { page: Page; notebook: Notebo
               className={`page page-c-${page.paper.color}`}
               style={{ width: PAGE_W, height: pageH, left: pageLeft, top: MARGIN, transform: `scale(${zoom})` }}
             >
-              <div className={paperClass(pdfBlock ? 'blank' : page.paper.type, page.paper.color)} onClick={onPaperClick} />
+              <div className={paperClass(pdfBlock ? "blank" : page.paper.type, page.paper.color)} onClick={onPaperClick} data-testid="paper" />
               <PageTitle page={page} />
               {doc?.blocks.map((b) => {
                 const off = moving && sel!.blocks.has(b.id) ? { transform: `translate(${drag!.dx}px, ${drag!.dy}px)` } : undefined;
