@@ -1,0 +1,18 @@
+{
+  "_about": "Themen für Notiz-Apps (OneNote/GoodNotes). Muster = reguläre Ausdrücke, ohne Groß/klein.",
+  "request_patterns": ["\\badd\\b", "\\bplease\\b", "\\bimprove", "\\brequest", "\\bwould be\\b", "\\ballow\\b", "\\bcreate folders\\b", "\\bmake it\\b"],
+  "themes": [
+    {"id": "sync-loss", "label": "Sync-Probleme und verlorene Notizen", "kind": "complaint",
+     "patterns": ["\\bsync", "\\blost\\b", "\\bdisappear", "\\bmissing note", "\\bnotes gone\\b", "\\ball notes\\b"]},
+    {"id": "export", "label": "Export/Backup klemmt (Lock-in)", "kind": "complaint",
+     "patterns": ["\\bexport", "\\bbackup\\b", "\\btied to\\b", "\\bleft onenote\\b"]},
+    {"id": "lag", "label": "Langsam, Tinte hängt hinterher", "kind": "complaint",
+     "patterns": ["\\blag", "\\bslow\\b", "\\bdelay\\b", "\\bperformance\\b", "\\bseconds\\b", "\\bworthless\\b"]},
+    {"id": "pricing", "label": "Abo statt Einmalkauf", "kind": "complaint",
+     "patterns": ["\\bsubscription", "\\bpaid\\b", "\\bfreemium\\b", "\\blicense", "\\bgoodnotes 5 v 6\\b", "\\brestore goodnotes\\b"]},
+    {"id": "typing", "label": "Tippen/Textfelder schwach", "kind": "complaint",
+     "patterns": ["\\btext box", "\\btext improvement\\b", "\\btext enhanced\\b"]},
+    {"id": "organize", "label": "Ordnung: Tags und Unterordner fehlen", "kind": "request",
+     "patterns": ["\\btag", "\\bsub ?folders?\\b", "\\bfolders within\\b"]}
+  ]
+}

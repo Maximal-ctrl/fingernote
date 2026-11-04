@@ -25,6 +25,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
       await flushAll();
       const blob = await exportBackup();
       downloadBlob(blob, `fingernote-backup-${new Date().toISOString().slice(0, 10)}.json`);
+      settings.set({ lastBackupAt: Date.now() });
       toast('Backup gespeichert.');
     } finally {
       setBusy(false);

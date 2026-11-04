@@ -51,6 +51,8 @@ export const settings = createStore(
     shapeColor: '#3b5bdb',
     shapeWidth: 3,
     sidebar: true,
+    lastBackupAt: 0,
+    backupSnoozeUntil: 0,
   },
   'fingernote:settings',
 );

@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, FileUp, Star, Ellipsis, Pencil, Trash2, Palette } from 'lucide-react';
+import { Plus, FileUp, Star, Ellipsis, Pencil, Trash2, Palette, FileText, ShieldCheck } from 'lucide-react';
+import { notebookToMarkdown } from '../lib/markdown';
+import { downloadBlob } from '../lib/backup';
+import { settings, ui } from '../lib/store';
 import { db, type Notebook } from '../db/db';
 import { deleteNotebook, updateNotebook } from '../db/repo';
 import { AppHeader } from '../ui/AppHeader';
@@ -33,10 +36,14 @@ export function Library() {
       { label: 'Umbenennen', icon: <Pencil size={16} />, onSelect: () => setRenaming(nb.id) },
       { label: nb.favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten', icon: <Star size={16} />, onSelect: () => updateNotebook(nb.id, { favorite: !nb.favorite }) },
       { label: 'Coverfarbe', icon: <Palette size={16} />, colors: COVER_COLORS.map((c) => ({ value: c.id, label: c.name, selected: nb.color === c.id, onSelect: () => updateNotebook(nb.id, { color: c.id }) })) },
+      { label: 'Als Markdown exportieren', icon: <FileText size={16} />, onSelect: async () => { const r = await notebookToMarkdown(nb.id); downloadBlob(new Blob([r.md], { type: 'text/markdown' }), `${r.name}.md`); toast('Markdown-Datei gespeichert.'); } },
       { separator: true, label: '' },
       { label: 'Löschen …', icon: <Trash2 size={16} />, danger: true, onSelect: () => setDeleting(nb) },
     ]);
 
+  const lastBackupAt = settings.use((s) => s.lastBackupAt);
+  const backupSnooze = settings.use((s) => s.backupSnoozeUntil);
+  const backupDue = !!notebooks?.length && Date.now() > backupSnooze && Date.now() - lastBackupAt > 14 * 864e5;
   const favorites = (notebooks ?? []).filter((n) => n.favorite);
   const recent = [...(notebooks ?? [])].sort((a, b) => (b.lastOpenedAt ?? b.updatedAt) - (a.lastOpenedAt ?? a.updatedAt));
 
@@ -86,6 +93,14 @@ export function Library() {
           </div>
         </div>
 
+        {backupDue && (
+          <div className="banner" role="status">
+            <ShieldCheck size={18} aria-hidden />
+            <span>Deine Notizen liegen nur in diesem Browser. {lastBackupAt ? `Letztes Backup vor ${Math.floor((Date.now() - lastBackupAt) / 864e5)} Tagen.` : 'Noch kein Backup.'}</span>
+            <Button size="sm" variant="primary" onClick={() => ui.set({ panel: 'settings' })}>Backup sichern</Button>
+            <Button size="sm" variant="ghost" onClick={() => settings.set({ backupSnoozeUntil: Date.now() + 7 * 864e5 })}>Später</Button>
+          </div>
+        )}
         {notebooks === undefined ? (
           <ul className="cover-grid" aria-hidden>{[0, 1, 2].map((i) => <li key={i} className="cover-item"><div className="cover skeleton" /></li>)}</ul>
         ) : notebooks.length === 0 ? (

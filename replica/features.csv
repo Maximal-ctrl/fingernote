@@ -48,3 +48,7 @@ Handschrifterkennung und OCR,ink,could,yes,skip,braucht ein Erkennungsmodell
 KI-Funktionen,ai,could,yes,skip,braucht ein Modell oder einen Dienst
 Marketplace für Vorlagen und Sticker,store,could,yes,skip,fremde lizenzierte Inhalte
 Office-Integration Outlook Teams,integrations,could,yes,skip,deren Ökosystem
+Notizbuch als Markdown exportieren,export,should,no,yes,"fixes.md #2, Test F08-H2"
+Backup-Erinnerung nach 14 Tagen,storage,should,no,yes,"fixes.md #4, Test F08-H3"
+Notfall-Kopie beim Schließen des Tabs,storage,must,no,yes,"fixes.md #3, Test F01-E6"
+Flüssige Tinte bei 3000 Strichen (p95 unter 17 ms),ink,should,no,yes,"fixes.md #1, gemessen headless"
