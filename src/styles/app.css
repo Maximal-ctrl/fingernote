@@ -412,6 +412,29 @@ kbd {
 .token { display: flex; align-items: center; gap: var(--s-2); font-size: var(--fs-xs); }
 .token span { width: 28px; height: 28px; border-radius: var(--r-sm); border: 1px solid var(--border); }
 
+/* ---------- Über Fingernote (#/about) ---------- */
+
+.about { height: 100%; overflow: auto; background: var(--bg); }
+.about-nav { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; padding: var(--s-3) var(--s-5); background: var(--bg); border-bottom: 1px solid var(--border); }
+.about main { max-width: 1040px; margin: 0 auto; padding: 0 var(--s-4) var(--s-8); }
+.about-hero { text-align: center; padding: var(--s-8) 0 var(--s-6); display: grid; justify-items: center; gap: var(--s-4); }
+.about-hero h1 { font-size: var(--fs-display); line-height: var(--lh-display); font-weight: var(--fw-display); max-width: 760px; text-wrap: balance; }
+.about-lead { font-size: var(--fs-lg); line-height: var(--lh-lg); color: var(--text-muted); max-width: 620px; }
+.about-shot { width: 100%; height: auto; margin-top: var(--s-5); border-radius: var(--r-lg); border: 1px solid var(--border); box-shadow: var(--sh-pop); }
+.about-section { padding: var(--s-6) 0; border-top: 1px solid var(--border); display: grid; gap: var(--s-3); }
+.about-section h2, .about-cta h2 { font-size: var(--fs-xl); line-height: var(--lh-xl); font-weight: var(--fw-xl); }
+.about-section p { font-size: var(--fs-base); line-height: var(--lh-base); max-width: 720px; }
+.about-steps { margin: 0; padding-left: var(--s-5); display: grid; gap: var(--s-2); font-size: var(--fs-base); line-height: var(--lh-base); }
+.about-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--s-4); }
+.about-grid li { padding: var(--s-4); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); display: grid; gap: var(--s-2); align-content: start; }
+.about-grid h3 { font-size: var(--fs-base); }
+.about-icon { color: var(--accent); }
+.about-faq { margin: 0; display: grid; gap: var(--s-4); }
+.about-faq dt { font-weight: 600; font-size: var(--fs-base); }
+.about-faq dd { margin: var(--s-1) 0 0; color: var(--text-muted); }
+.about-cta { text-align: center; padding: var(--s-8) 0; border-top: 1px solid var(--border); display: grid; justify-items: center; gap: var(--s-4); }
+@media (max-width: 600px) { .about-hero h1 { font-size: var(--fs-xl); line-height: var(--lh-xl); } .about-nav { padding: var(--s-2) var(--s-4); } }
+
 /* ---------- Responsiv ---------- */
 
 @media (max-width: 900px) {

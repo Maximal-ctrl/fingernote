@@ -5,6 +5,7 @@ import { Toaster } from './ui/ui';
 import { Library } from './screens/Library';
 import { NotebookView } from './screens/NotebookView';
 import { DesignPage } from './screens/DesignPage';
+import { AboutPage } from './screens/AboutPage';
 import { SearchPanel } from './screens/SearchPanel';
 import { TagsPanel } from './screens/TagsPanel';
 import { TrashPanel } from './screens/TrashPanel';
@@ -51,6 +52,7 @@ export function App() {
       {route.name === 'library' && <Library />}
       {route.name === 'notebook' && <NotebookView key={route.notebookId} notebookId={route.notebookId} pageId={route.pageId} q={route.q} />}
       {route.name === 'design' && <DesignPage />}
+      {route.name === 'about' && <AboutPage />}
       {panel === 'search' && <SearchPanel onClose={close} />}
       {panel === 'tags' && <TagsPanel onClose={close} />}
       {panel === 'trash' && <TrashPanel onClose={close} />}

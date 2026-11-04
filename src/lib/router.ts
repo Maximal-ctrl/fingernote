@@ -20,7 +20,8 @@ export function navigate(path: string, replace = false) {
 export type Route =
   | { name: 'library' }
   | { name: 'notebook'; notebookId: string; pageId?: string; q?: string }
-  | { name: 'design' };
+  | { name: 'design' }
+  | { name: 'about' };
 
 export function parseRoute(hash: string): Route {
   const [path, query] = hash.split('?');
@@ -30,6 +31,7 @@ export function parseRoute(hash: string): Route {
     return { name: 'notebook', notebookId: parts[1], pageId: parts[2] === 'p' ? parts[3] : undefined, q };
   }
   if (parts[0] === 'design') return { name: 'design' };
+  if (parts[0] === 'about') return { name: 'about' };
   return { name: 'library' };
 }
 

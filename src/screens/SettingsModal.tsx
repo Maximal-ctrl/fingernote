@@ -76,6 +76,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </div>
           <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void doImport(f); }} />
         </fieldset>
+        <p className="small"><a href="#/about" onClick={onClose}>Über Fingernote</a></p>
         <fieldset className="field">
           <legend>Tastenkürzel</legend>
           <dl className="shortcuts">

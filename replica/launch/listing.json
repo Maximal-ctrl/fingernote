@@ -1,0 +1,16 @@
+{
+  "avoid": ["OneNote", "One Note", "GoodNotes", "Good Notes", "Microsoft"],
+  "app_store": {
+    "name": "Fingernote: Stift & Tastatur",
+    "subtitle": "Notizen nur auf deinem Gerät",
+    "promotional_text": "Tippen und von Hand schreiben auf derselben Seite. Kein Konto, kein Sync, Markdown-Export für jedes Notizbuch.",
+    "description": "Fingernote ist ein Notizbuch für Stift und Tastatur, das nur auf deinem Gerät lebt.\n\nKlick irgendwo auf die Seite und tipp los, oder schreib mit Stift oder Finger. Beides auf derselben Seite.\n\nNichts geht verloren:\n- speichert beim Tippen, auch wenn du die App schließt\n- Papierkorb für gelöschte Seiten\n- Erinnerung ans Backup\n\nDu kommst jederzeit raus:\n- jedes Notizbuch als Markdown\n- komplettes Backup als eine Datei\n- Seiten als PDF drucken\n\nDazu: Stift mit Druck, Marker, Radierer, Lasso, Formen, Papiervorlagen, PDFs beschriften, Abschnitte und Unterseiten, Tags, Volltextsuche, Dunkelmodus.",
+    "keywords": "handschrift,pdf,markieren,notizbuch,lokal,offline,tags,skizze,mitschrift,zeichnen",
+    "whats_new": "Markdown-Export und Backup-Erinnerung."
+  },
+  "google_play": {
+    "title": "Fingernote: Stift & Tastatur",
+    "short_description": "Tippen und von Hand schreiben auf einer Seite. Nur auf deinem Gerät.",
+    "full_description": "Fingernote ist ein Notizbuch für Stift und Tastatur, das nur auf deinem Gerät lebt.\n\nKlick irgendwo auf die Seite und tipp los, oder schreib mit Stift oder Finger.\n\nNichts geht verloren, und du kommst jederzeit raus: Markdown-Export, Backup als eine Datei, Drucken als PDF."
+  }
+}
