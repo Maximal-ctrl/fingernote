@@ -1,45 +1,45 @@
 feature,area,priority,original,clone,notes
-Bibliothek mit Notizbuch-Covern,library,must,yes,no,GoodNotes
-Notizbuch erstellen umbenennen löschen,library,must,yes,no,
-Abschnitte mit Farbe anlegen umbenennen löschen,organize,must,yes,no,OneNote
-Seiten anlegen umbenennen löschen,organize,must,yes,no,
-Seitenliste umsortieren per Drag,organize,must,yes,no,
-Freie Leinwand: überall klicken und tippen,canvas,must,yes,no,OneNote
-Textcontainer verschieben und Breite ändern,canvas,must,yes,no,
-Textformat fett kursiv unterstrichen Überschrift Liste,text,must,yes,no,
-Stift mit Druckstärke,ink,must,yes,no,GoodNotes
-Marker (transparent),ink,must,yes,no,
-Radierer (Strich),ink,must,yes,no,
-Stiftfarben und Strichstärke,ink,must,yes,no,
-Rückgängig und Wiederholen,canvas,must,yes,no,
-Papiervorlagen leer liniert kariert gepunktet,paper,must,yes,no,
-Automatisches Speichern lokal,storage,must,yes,no,
-Volltextsuche über alle Notizbücher,search,must,yes,no,
-Seitentitel mit Datum und Uhrzeit,canvas,must,yes,no,OneNote
-PDF importieren und beschriften,pdf,must,yes,no,GoodNotes
-Lasso: auswählen verschieben löschen,ink,must,yes,no,
-Funktioniert mit Maus Touch und Stift,ink,must,yes,no,Pointer Events
-Unterseiten (Einrückung),organize,should,yes,no,OneNote
-Seite in anderen Abschnitt verschieben,organize,should,yes,no,
-Notiz-Tags To-Do Wichtig Frage Idee,tags,should,yes,no,OneNote
-Tag-Übersicht,tags,should,yes,no,OneNote Find Tags
-Bilder einfügen (Datei und Zwischenablage),canvas,should,yes,no,
-Formwerkzeug Linie Rechteck Ellipse Pfeil,ink,should,yes,no,
-Lasso: umfärben und duplizieren,ink,should,yes,no,GoodNotes
-Zoom,canvas,should,yes,no,
-Papierfarben,paper,should,yes,no,
-Cornell-Vorlage,paper,should,yes,no,GoodNotes
-Favoriten,library,should,yes,no,GoodNotes
-Papierkorb mit Wiederherstellen,organize,should,yes,no,OneNote Deleted Notes
-Dunkelmodus,ui,should,yes,no,
-Tastaturkürzel,ui,should,yes,no,
-Seite als PNG exportieren,export,should,yes,no,
-Backup exportieren und importieren,export,could,no,no,
-Radierer nur für Marker,ink,could,yes,no,GoodNotes
+Bibliothek mit Notizbuch-Covern,library,must,yes,yes,GoodNotes
+Notizbuch erstellen umbenennen löschen,library,must,yes,yes,
+Abschnitte mit Farbe anlegen umbenennen löschen,organize,must,yes,yes,OneNote
+Seiten anlegen umbenennen löschen,organize,must,yes,yes,
+Seitenliste umsortieren per Drag,organize,must,yes,yes,"Maus-Drag und Lang-Drücken auf Touch (e2e F03-E3, M-H2)"
+Freie Leinwand: überall klicken und tippen,canvas,must,yes,yes,OneNote
+Textcontainer verschieben und Breite ändern,canvas,must,yes,yes,
+Textformat fett kursiv unterstrichen Überschrift Liste,text,must,yes,yes,
+Stift mit Druckstärke,ink,must,yes,yes,GoodNotes; Pointer Events + perfect-freehand; mit echtem Stift noch nicht getestet
+Marker (transparent),ink,must,yes,yes,
+Radierer (Strich),ink,must,yes,yes,
+Stiftfarben und Strichstärke,ink,must,yes,yes,
+Rückgängig und Wiederholen,canvas,must,yes,yes,
+Papiervorlagen leer liniert kariert gepunktet,paper,must,yes,yes,
+Automatisches Speichern lokal,storage,must,yes,yes,
+Volltextsuche über alle Notizbücher,search,must,yes,yes,
+Seitentitel mit Datum und Uhrzeit,canvas,must,yes,yes,OneNote
+PDF importieren und beschriften,pdf,must,yes,yes,GoodNotes
+Lasso: auswählen verschieben löschen,ink,must,yes,yes,
+Funktioniert mit Maus Touch und Stift,ink,must,yes,yes,Pointer Events; Maus + Touch getestet (e2e); Stift erkannt → Finger scrollt
+Unterseiten (Einrückung),organize,should,yes,yes,OneNote
+Seite in anderen Abschnitt verschieben,organize,should,yes,yes,
+Notiz-Tags To-Do Wichtig Frage Idee,tags,should,yes,yes,OneNote
+Tag-Übersicht,tags,should,yes,yes,OneNote Find Tags
+Bilder einfügen (Datei und Zwischenablage),canvas,should,yes,yes,
+Formwerkzeug Linie Rechteck Ellipse Pfeil,ink,should,yes,yes,
+Lasso: umfärben und duplizieren,ink,should,yes,yes,GoodNotes
+Zoom,canvas,should,yes,yes,
+Papierfarben,paper,should,yes,yes,
+Cornell-Vorlage,paper,should,yes,yes,GoodNotes
+Favoriten,library,should,yes,yes,GoodNotes
+Papierkorb mit Wiederherstellen,organize,should,yes,yes,OneNote Deleted Notes
+Dunkelmodus,ui,should,yes,yes,
+Tastaturkürzel,ui,should,yes,yes,
+Seite als PNG exportieren,export,should,yes,partial,stattdessen Drucken / als PDF sichern
+Backup exportieren und importieren,export,could,no,yes,
+Radierer nur für Marker,ink,could,yes,yes,GoodNotes
 Kritzeln zum Radieren,ink,could,yes,no,GoodNotes Geste
-Seitenvorlage pro Notizbuch,paper,could,yes,no,
-Mobile Ansicht,ui,could,yes,no,
-Seite als PDF drucken,export,could,yes,no,
+Seitenvorlage pro Notizbuch,paper,could,yes,yes,
+Mobile Ansicht,ui,could,yes,yes,
+Seite als PDF drucken,export,could,yes,yes,
 Abschnittsgruppen,organize,could,yes,no,OneNote
 Audio-Aufnahme,media,could,yes,no,
 Cloud-Sync und Konto,sync,could,yes,skip,deren Cloud-Dienst; lokal ohne Konto

@@ -64,4 +64,34 @@ test.describe('F03 Organisieren', () => {
     await page.getByRole('menuitem', { name: 'Zu Favoriten' }).click();
     await expect(page.getByRole('heading', { name: 'Favoriten' })).toBeVisible();
   });
+
+  test('F03-E3 Seite per Maus-Drag umsortieren und auf anderen Abschnitt ziehen', async ({ page }) => {
+    await newNotebook(page);
+    await page.getByLabel('Seitentitel').first().fill('A');
+    await page.getByRole('button', { name: 'Seite', exact: true }).click();
+    await expect(page.getByLabel('Seitentitel').first()).toHaveValue('');
+    await page.getByLabel('Seitentitel').first().fill('B');
+    await page.waitForTimeout(400);
+    const b = (await page.getByRole('button', { name: /^B\s?\d/ }).boundingBox())!;
+    const a = (await page.getByRole('button', { name: /^A\s?\d/ }).boundingBox())!;
+    await page.mouse.move(b.x + 20, b.y + b.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(a.x + 20, a.y + 4, { steps: 8 });
+    await page.mouse.up();
+    await expect(page.locator('.pages-col .page-name').first()).toHaveText('B');
+    // auf neuen Abschnitt ziehen
+    await page.getByRole('button', { name: 'Abschnitt', exact: true }).click();
+    await expect(page.getByLabel('Abschnittsname')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await page.getByRole('tab', { name: 'Notizen' }).click();
+    const src = (await page.getByRole('button', { name: /^A\s?\d/ }).boundingBox())!;
+    const tab = (await page.getByRole('tab', { name: 'Abschnitt 2' }).boundingBox())!;
+    await page.mouse.move(src.x + 20, src.y + src.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(tab.x + 30, tab.y + tab.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await expect(page.getByRole('button', { name: /^A\s?\d/ })).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Abschnitt 2' }).click();
+    await expect(page.getByRole('button', { name: /^A\s?\d/ })).toBeVisible();
+  });
 });

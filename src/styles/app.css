@@ -168,6 +168,11 @@ kbd {
 .sortable li.drop-before::before { top: -1px; }
 .sortable li.drop-after::after { bottom: -1px; }
 .sortable li.drop-into > * { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.sortable li { touch-action: pan-y; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.sortable li.is-dragging { opacity: .4; }
+.sortable li.is-hot > * { background: var(--accent-soft); }
+.sortable.is-sorting { cursor: grabbing; }
+.drag-ghost { position: fixed; z-index: 400; pointer-events: none; padding: var(--s-2) var(--s-3); background: var(--bg); color: var(--text); border: 1px solid var(--accent); border-radius: var(--r-sm); box-shadow: var(--sh-pop); font-weight: 600; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .section-tab {
   position: relative; display: flex; align-items: center; height: 36px; padding: 0 var(--s-2) 0 var(--s-4);

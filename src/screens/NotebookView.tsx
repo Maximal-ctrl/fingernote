@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Plus, FileUp, Pencil, Trash2, IndentIncrease, IndentDecrease, ArrowUp, ArrowDown, FolderInput, PanelLeft,
@@ -203,7 +204,6 @@ export function NotebookView({ notebookId, pageId, q }: { notebookId: string; pa
               <SortableList
                 items={sections ?? []}
                 onReorder={(ids) => reorderSections(ids)}
-                onDropPage={async (pid, sid) => { await movePageToSection(pid, sid); toast('Seite verschoben.'); }}
                 render={(s) => (
                   <div
                     className={`section-tab ${s.id === sectionId ? 'is-active' : ''}`}
@@ -241,6 +241,7 @@ export function NotebookView({ notebookId, pageId, q }: { notebookId: string; pa
                   items={pages}
                   dragType="page"
                   onReorder={(ids) => reorderPages(ids)}
+                  onDropPage={async (pid, sid) => { if (sid === sectionId) return; await movePageToSection(pid, sid); toast('Seite verschoben.'); }}
                   render={(p) => (
                     <div
                       className={`page-item level-${p.level} ${p.id === pageId ? 'is-active' : ''}`}
@@ -313,61 +314,120 @@ export function NotebookView({ notebookId, pageId, q }: { notebookId: string; pa
   );
 }
 
-/* ---------- Sortierbare Liste (HTML5 Drag & Drop) ---------- */
+/* ---------- Sortierbare Liste (Pointer Events: Maus, Finger per Lang-Drücken, Stift) ---------- */
+
+let suppressClick = false;
 
 function SortableList<T extends { id: string }>({ items, render, onReorder, onDropPage, dragType = 'section' }: {
   items: T[];
   render: (item: T) => React.ReactNode;
   onReorder: (ids: string[]) => void;
-  onDropPage?: (pageId: string, targetId: string) => void;
+  /** Seiten-Liste: Seite auf einen Abschnitt ziehen */
+  onDropPage?: (pageId: string, sectionId: string) => void;
   dragType?: 'section' | 'page';
 }) {
-  const [over, setOver] = useState<{ id: string; pos: 'before' | 'after' | 'into' } | null>(null);
-  const dragId = useRef<string | null>(null);
+  const [drag, setDrag] = useState<{ id: string; x: number; y: number; over: { id: string; pos: 'before' | 'after' | 'into' } | null } | null>(null);
+  const [hot, setHot] = useState<string | null>(null);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLLIElement>, id: string) => {
+    if ((e.pointerType === 'mouse' && e.button !== 0) || (e.target as HTMLElement).closest('input')) return;
+    const sx = e.clientX, sy = e.clientY, pid = e.pointerId;
+    let active = false;
+    let over: { id: string; pos: 'before' | 'after' | 'into' } | null = null;
+    const start = () => {
+      active = true;
+      setHot(null);
+      setDrag({ id, x: sx, y: sy, over: null });
+      navigator.vibrate?.(10);
+    };
+    const timer = e.pointerType === 'mouse' ? 0 : window.setTimeout(() => { setHot(id); start(); }, 350);
+    const blockScroll = (ev: TouchEvent) => { if (active) ev.preventDefault(); };
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== pid) return;
+      const dist = Math.hypot(ev.clientX - sx, ev.clientY - sy);
+      if (!active) {
+        if (e.pointerType === 'mouse' && dist > 6) start();
+        else if (e.pointerType !== 'mouse' && dist > 10) return cleanup(); // normales Scrollen
+        if (!active) return;
+      }
+      ev.preventDefault();
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+      const target = el?.closest<HTMLElement>('[data-sort-id]');
+      over = null;
+      if (target) {
+        const tType = target.dataset.sortType, tId = target.dataset.sortId!;
+        const r = target.getBoundingClientRect();
+        if (tType === dragType && tId !== id) over = { id: tId, pos: ev.clientY < r.top + r.height / 2 ? 'before' : 'after' };
+        else if (dragType === 'page' && tType === 'section' && onDropPage) over = { id: tId, pos: 'into' };
+      }
+      setDrag({ id, x: ev.clientX, y: ev.clientY, over });
+      window.dispatchEvent(new CustomEvent('fn:sort-over', { detail: over?.pos === 'into' ? over.id : null }));
+    };
+    const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== pid) return;
+      if (active) {
+        suppressClick = true;
+        setTimeout(() => { suppressClick = false; }, 50);
+        if (over?.pos === 'into') onDropPage?.(id, over.id);
+        else if (over) {
+          const ids = items.map((x) => x.id).filter((x) => x !== id);
+          ids.splice(ids.indexOf(over.id) + (over.pos === 'after' ? 1 : 0), 0, id);
+          onReorder(ids);
+        }
+      }
+      cleanup();
+    };
+    const cleanup = () => {
+      clearTimeout(timer);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      window.removeEventListener('touchmove', blockScroll);
+      window.dispatchEvent(new CustomEvent('fn:sort-over', { detail: null }));
+      setDrag(null);
+      setHot(null);
+    };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    window.addEventListener('touchmove', blockScroll, { passive: false });
+  };
+
+  // Abschnitte leuchten auf, wenn eine Seite über sie gezogen wird
+  const [into, setInto] = useState<string | null>(null);
+  useEffect(() => {
+    if (dragType !== 'section') return;
+    const f = (e: Event) => setInto((e as CustomEvent).detail);
+    window.addEventListener('fn:sort-over', f);
+    return () => window.removeEventListener('fn:sort-over', f);
+  }, [dragType]);
+
+  const dragged = drag && items.find((x) => x.id === drag.id);
   return (
-    <ul className="sortable" role={dragType === 'section' ? 'tablist' : undefined} aria-orientation={dragType === 'section' ? 'vertical' : undefined}>
-      {items.map((item) => (
-        <li
-          key={item.id}
-          role={dragType === 'section' ? 'presentation' : undefined}
-          draggable
-          className={over?.id === item.id ? `drop-${over.pos}` : ''}
-          onDragStart={(e) => {
-            dragId.current = item.id;
-            e.dataTransfer.setData(`application/x-fn-${dragType}`, item.id);
-            e.dataTransfer.effectAllowed = 'move';
-          }}
-          onDragOver={(e) => {
-            const types = e.dataTransfer.types;
-            const own = types.includes(`application/x-fn-${dragType}`);
-            const pageOntoSection = dragType === 'section' && types.includes('application/x-fn-page') && onDropPage;
-            if (!own && !pageOntoSection) return;
-            e.preventDefault();
-            const r = e.currentTarget.getBoundingClientRect();
-            setOver({ id: item.id, pos: pageOntoSection ? 'into' : e.clientY < r.top + r.height / 2 ? 'before' : 'after' });
-          }}
-          onDragLeave={() => setOver(null)}
-          onDrop={(e) => {
-            e.preventDefault();
-            const pos = over?.pos;
-            setOver(null);
-            const pageId = e.dataTransfer.getData('application/x-fn-page');
-            if (dragType === 'section' && pageId && onDropPage) {
-              onDropPage(pageId, item.id);
-              return;
-            }
-            const id = e.dataTransfer.getData(`application/x-fn-${dragType}`);
-            if (!id || id === item.id) return;
-            const ids = items.map((x) => x.id).filter((x) => x !== id);
-            const at = ids.indexOf(item.id) + (pos === 'after' ? 1 : 0);
-            ids.splice(at, 0, id);
-            onReorder(ids);
-          }}
-          onDragEnd={() => { dragId.current = null; setOver(null); }}
-        >
-          {render(item)}
-        </li>
-      ))}
+    <ul className={`sortable ${drag ? 'is-sorting' : ''}`} role={dragType === 'section' ? 'tablist' : undefined} aria-orientation={dragType === 'section' ? 'vertical' : undefined}>
+      {items.map((item) => {
+        const cls = drag?.over?.id === item.id && drag.over.pos !== 'into' ? `drop-${drag.over.pos}` : into === item.id ? 'drop-into' : '';
+        return (
+          <li
+            key={item.id}
+            role={dragType === 'section' ? 'presentation' : undefined}
+            data-sort-id={item.id}
+            data-sort-type={dragType}
+            className={`${cls} ${drag?.id === item.id ? 'is-dragging' : ''} ${hot === item.id ? 'is-hot' : ''}`}
+            onPointerDown={(e) => onPointerDown(e, item.id)}
+            onClickCapture={(e) => { if (suppressClick) { e.stopPropagation(); e.preventDefault(); } }}
+            onContextMenu={(e) => { if (drag) e.preventDefault(); }}
+          >
+            {render(item)}
+          </li>
+        );
+      })}
+      {drag && dragged && createPortal(
+        <div className="drag-ghost" style={{ left: drag.x + 12, top: drag.y + 8 }} aria-hidden>
+          {'title' in dragged ? String((dragged as { title?: string }).title || 'Unbenannte Seite') : ''}
+        </div>,
+        document.body,
+      )}
     </ul>
   );
 }
