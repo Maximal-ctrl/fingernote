@@ -27,6 +27,16 @@ Ergebnis: **bereit für den lokalen Start.**
 - Dev- und Produktionsstart nutzen bewusst **denselben Port 5173**: IndexedDB hängt am Origin, sonst sähe man je nach Startart andere Notizen.
 - Laufzeit ohne Netzwerk: Schrift, Icons und PDF-Worker sind gebündelt.
 
+## Nachtrag: Startproblem unter Windows (BUG-008)
+
+- Severity S1 (Start blockiert) · gemeldet vom Nutzer: „die Kommandozeile schließt sich direkt wieder“
+- Ursache: `start.bat` enthielt „(LTS)“ innerhalb eines geklammerten Befehlsblocks. Die schließende Klammer beendete den Block
+  vorzeitig → Syntaxfehler → cmd bricht ab, bevor `pause` erreicht wird.
+- Fix: Startskripte ohne Klammerblöcke (Sprungmarken), jede Fehlermeldung endet mit `pause`. Außerdem liegt jetzt der fertige
+  Build (`dist/`) im ZIP und `serve.mjs` (nur Node, keine Pakete) liefert ihn aus: kein `npm install`, kein Build beim Nutzer.
+- Geprüft: 41/41 e2e-Tests gegen `node serve.mjs`; Pfad-Traversal abgewiesen. Unter echtem Windows nicht ausgeführt
+  (keine Windows-Umgebung hier), Skript auf Klammern und CRLF geprüft.
+
 ## Nicht gemacht (bewusst)
 
 | Skill-Schritt | warum nicht |

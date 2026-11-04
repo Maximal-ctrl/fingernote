@@ -6,20 +6,30 @@ ohne Konto und ohne Cloud.
 
 ## Starten
 
-Voraussetzung: [Node.js](https://nodejs.org) 22 LTS (mindestens 20.19).
+Voraussetzung: nur [Node.js](https://nodejs.org) (Version 22 LTS empfohlen, mindestens 20). Keine weiteren Installationen:
+die fertige App liegt im Ordner `dist/` bei.
 
-**Einfach:** Doppelklick auf `start.command` (macOS), `start.bat` (Windows) oder `./start.sh` (Linux).
-Beim ersten Mal werden die Pakete installiert (1–2 Minuten), danach öffnet sich http://localhost:5173.
+1. Das ZIP **vollständig entpacken** (Windows: Rechtsklick → „Alle extrahieren“). Nicht aus dem ZIP heraus starten.
+2. Im entpackten Ordner doppelklicken:
+   - Windows: `start.bat`
+   - macOS: `start.command` (beim ersten Mal ggf. Rechtsklick → „Öffnen“, weil die Datei aus dem Internet kommt)
+   - Linux: `./start.sh`
+3. Der Browser öffnet http://localhost:5173. **Das schwarze Fenster offen lassen**, solange du Fingernote benutzt.
 
-**Im Terminal:**
+Geht der Browser nicht von selbst auf: http://localhost:5173 von Hand öffnen.
 
-```bash
-npm install
-npm start
-```
+**Im Terminal** geht es auch: `node serve.mjs` im Ordner `fingernote`.
 
-`npm start` baut die App und startet sie unter http://localhost:5173. Zum Weiterentwickeln mit Live-Neuladen: `npm run dev`
-(gleiche Adresse, gleiche Notizen).
+**Zum Weiterentwickeln** (braucht `npm install`): `npm run dev` (Live-Neuladen) oder `npm start` (neu bauen und starten).
+Alle Wege nutzen dieselbe Adresse, also dieselben Notizen.
+
+## Wenn es nicht startet
+
+| Meldung im Fenster | Lösung |
+| --- | --- |
+| „Node.js wurde nicht gefunden“ | Node.js 22 LTS von nodejs.org installieren, Fenster schließen, neu doppelklicken |
+| „Der Ordner dist fehlt“ | ZIP erst entpacken, dann im entpackten Ordner starten |
+| „Port 5173 ist schon belegt“ | Fingernote läuft schon in einem anderen Fenster: einfach http://localhost:5173 öffnen |
 
 ## Wo sind meine Notizen?
 
