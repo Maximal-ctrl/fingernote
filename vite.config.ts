@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  server: { port: 5173, host: 'localhost' },
-  preview: { port: 4173, host: 'localhost' },
+  server: { port: 5173, strictPort: true, host: 'localhost' },
+  // Gleicher Port wie der Dev-Server: Die Notizen hängen am Origin (localhost:5173).
+  preview: { port: 5173, strictPort: true, host: 'localhost', open: true },
   build: { target: 'es2022', chunkSizeWarningLimit: 2500 },
 });
