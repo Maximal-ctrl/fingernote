@@ -1,0 +1,6 @@
+{
+  "name": "Fingernote",
+  "avoid": ["OneNote", "One Note", "GoodNotes", "Good Notes", "Microsoft"],
+  "domains": ["onenote.com", "goodnotes.com", "microsoft.com", "office.com"],
+  "colors": ["#7719aa"]
+}
