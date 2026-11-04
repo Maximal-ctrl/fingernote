@@ -1,0 +1,50 @@
+feature,area,priority,original,clone,notes
+Bibliothek mit Notizbuch-Covern,library,must,yes,no,GoodNotes
+Notizbuch erstellen umbenennen löschen,library,must,yes,no,
+Abschnitte mit Farbe anlegen umbenennen löschen,organize,must,yes,no,OneNote
+Seiten anlegen umbenennen löschen,organize,must,yes,no,
+Seitenliste umsortieren per Drag,organize,must,yes,no,
+Freie Leinwand: überall klicken und tippen,canvas,must,yes,no,OneNote
+Textcontainer verschieben und Breite ändern,canvas,must,yes,no,
+Textformat fett kursiv unterstrichen Überschrift Liste,text,must,yes,no,
+Stift mit Druckstärke,ink,must,yes,no,GoodNotes
+Marker (transparent),ink,must,yes,no,
+Radierer (Strich),ink,must,yes,no,
+Stiftfarben und Strichstärke,ink,must,yes,no,
+Rückgängig und Wiederholen,canvas,must,yes,no,
+Papiervorlagen leer liniert kariert gepunktet,paper,must,yes,no,
+Automatisches Speichern lokal,storage,must,yes,no,
+Volltextsuche über alle Notizbücher,search,must,yes,no,
+Seitentitel mit Datum und Uhrzeit,canvas,must,yes,no,OneNote
+PDF importieren und beschriften,pdf,must,yes,no,GoodNotes
+Lasso: auswählen verschieben löschen,ink,must,yes,no,
+Funktioniert mit Maus Touch und Stift,ink,must,yes,no,Pointer Events
+Unterseiten (Einrückung),organize,should,yes,no,OneNote
+Seite in anderen Abschnitt verschieben,organize,should,yes,no,
+Notiz-Tags To-Do Wichtig Frage Idee,tags,should,yes,no,OneNote
+Tag-Übersicht,tags,should,yes,no,OneNote Find Tags
+Bilder einfügen (Datei und Zwischenablage),canvas,should,yes,no,
+Formwerkzeug Linie Rechteck Ellipse Pfeil,ink,should,yes,no,
+Lasso: umfärben und duplizieren,ink,should,yes,no,GoodNotes
+Zoom,canvas,should,yes,no,
+Papierfarben,paper,should,yes,no,
+Cornell-Vorlage,paper,should,yes,no,GoodNotes
+Favoriten,library,should,yes,no,GoodNotes
+Papierkorb mit Wiederherstellen,organize,should,yes,no,OneNote Deleted Notes
+Dunkelmodus,ui,should,yes,no,
+Tastaturkürzel,ui,should,yes,no,
+Seite als PNG exportieren,export,should,yes,no,
+Backup exportieren und importieren,export,could,no,no,
+Radierer nur für Marker,ink,could,yes,no,GoodNotes
+Kritzeln zum Radieren,ink,could,yes,no,GoodNotes Geste
+Seitenvorlage pro Notizbuch,paper,could,yes,no,
+Mobile Ansicht,ui,could,yes,no,
+Seite als PDF drucken,export,could,yes,no,
+Abschnittsgruppen,organize,could,yes,no,OneNote
+Audio-Aufnahme,media,could,yes,no,
+Cloud-Sync und Konto,sync,could,yes,skip,deren Cloud-Dienst; lokal ohne Konto
+Echtzeit-Zusammenarbeit,sync,could,yes,skip,deren Netzwerk und Server
+Handschrifterkennung und OCR,ink,could,yes,skip,braucht ein Erkennungsmodell
+KI-Funktionen,ai,could,yes,skip,braucht ein Modell oder einen Dienst
+Marketplace für Vorlagen und Sticker,store,could,yes,skip,fremde lizenzierte Inhalte
+Office-Integration Outlook Teams,integrations,could,yes,skip,deren Ökosystem

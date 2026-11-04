@@ -1,0 +1,88 @@
+/* generiert von scripts/tokens.mjs – nicht von Hand ändern, sondern replica/design/tokens.json */
+:root {
+  --bg: #ffffff;
+  --surface: #f5f6f8;
+  --surface-2: #eceef2;
+  --border: #dfe2e7;
+  --border-input: #868e98;
+  --text: #16191f;
+  --text-muted: #5b6470;
+  --accent: #3b5bdb;
+  --accent-soft: #e8edfc;
+  --on-accent: #ffffff;
+  --danger: #c62f2f;
+  --success: #1f7a4d;
+  --warning: #9a6100;
+  --paper: #ffffff;
+  --paper-line: #c9d3e3;
+  --canvas: #e9ebef;
+  --font-sans: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --fs-xs: 12px;
+  --lh-xs: 16px;
+  --fw-xs: 500;
+  --fs-sm: 14px;
+  --lh-sm: 20px;
+  --fw-sm: 400;
+  --fs-base: 16px;
+  --lh-base: 24px;
+  --fw-base: 400;
+  --fs-lg: 20px;
+  --lh-lg: 28px;
+  --fw-lg: 600;
+  --fs-xl: 28px;
+  --lh-xl: 34px;
+  --fw-xl: 700;
+  --fs-display: 40px;
+  --lh-display: 44px;
+  --fw-display: 700;
+  --s-0: 0px;
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-pill: 999px;
+  --sh-card: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10);
+  --sh-pop: 0 12px 32px rgba(16,24,40,.16);
+  --sh-paper: 0 1px 3px rgba(16,24,40,.12), 0 6px 18px rgba(16,24,40,.06);
+  --m-fast: 120ms;
+  --m-base: 200ms;
+  --m-ease: cubic-bezier(.2,.8,.2,1);
+  --l-header: 48px;
+  --l-toolbar: 52px;
+  --l-sections-col: 200px;
+  --l-pages-col: 248px;
+  --l-page-width: 900px;
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  --bg: #15181d;
+  --surface: #1b1f25;
+  --surface-2: #252a32;
+  --border: #323843;
+  --border-input: #7a8391;
+  --text: #e8eaee;
+  --text-muted: #a5adb9;
+  --accent: #93a8ff;
+  --accent-soft: #262f4a;
+  --on-accent: #0e1222;
+  --danger: #ff8f87;
+  --success: #6fcf97;
+  --warning: #f2c14e;
+  --canvas: #0f1115;
+  --sh-card: 0 1px 2px rgba(0,0,0,.4), 0 1px 3px rgba(0,0,0,.5);
+  --sh-pop: 0 12px 32px rgba(0,0,0,.55);
+  --sh-paper: 0 1px 3px rgba(0,0,0,.5), 0 8px 24px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+.paper-c-white, .page-c-white { --pp: #ffffff; --pl: #c9d3e3; --pt: #16191f; }
+.paper-c-cream, .page-c-cream { --pp: #fbf6e7; --pl: #dccfae; --pt: #16191f; }
+.paper-c-gray, .page-c-gray { --pp: #f1f2f4; --pl: #c3c9d3; --pt: #16191f; }
+.paper-c-dark, .page-c-dark { --pp: #20242b; --pl: #3b424e; --pt: #e8eaee; }
