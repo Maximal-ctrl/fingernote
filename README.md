@@ -6,19 +6,22 @@ ohne Konto und ohne Cloud.
 
 ## Starten
 
-Voraussetzung: nur [Node.js](https://nodejs.org) (Version 22 LTS empfohlen, mindestens 20). Keine weiteren Installationen:
-die fertige App liegt im Ordner `dist/` bei.
+Voraussetzung: [Node.js](https://nodejs.org) (Version 22 LTS empfohlen, mindestens 20).
 
-1. Das ZIP **vollständig entpacken** (Windows: Rechtsklick → „Alle extrahieren“). Nicht aus dem ZIP heraus starten.
-2. Im entpackten Ordner doppelklicken:
+1. Herunterladen, eine von beiden Varianten:
+   - auf GitHub **Code → Download ZIP**, dann **vollständig entpacken** (Windows: Rechtsklick → „Alle extrahieren“), oder
+   - `git clone https://github.com/Maximal-ctrl/fingernote.git`
+2. Im Ordner doppelklicken:
    - Windows: `start.bat`
-   - macOS: `start.command` (beim ersten Mal ggf. Rechtsklick → „Öffnen“, weil die Datei aus dem Internet kommt)
+   - macOS: `start.command` (beim ersten Mal ggf. Rechtsklick → „Öffnen“)
    - Linux: `./start.sh`
-3. Der Browser öffnet http://localhost:5173. **Das schwarze Fenster offen lassen**, solange du Fingernote benutzt.
+3. **Beim ersten Start** wird Fingernote einmal eingerichtet (Pakete laden und bauen, 1–2 Minuten, braucht Internet).
+   Danach startet es in Sekunden. Der Browser öffnet http://localhost:5173.
+4. **Das schwarze Fenster offen lassen**, solange du Fingernote benutzt.
 
 Geht der Browser nicht von selbst auf: http://localhost:5173 von Hand öffnen.
 
-**Im Terminal** geht es auch: `node serve.mjs` im Ordner `fingernote`.
+**Im Terminal** geht es auch: `npm install`, `npm run build:app`, dann `node serve.mjs`.
 
 **Zum Weiterentwickeln** (braucht `npm install`): `npm run dev` (Live-Neuladen) oder `npm start` (neu bauen und starten).
 Alle Wege nutzen dieselbe Adresse, also dieselben Notizen.
@@ -28,7 +31,8 @@ Alle Wege nutzen dieselbe Adresse, also dieselben Notizen.
 | Meldung im Fenster | Lösung |
 | --- | --- |
 | „Node.js wurde nicht gefunden“ | Node.js 22 LTS von nodejs.org installieren, Fenster schließen, neu doppelklicken |
-| „Der Ordner dist fehlt“ | ZIP erst entpacken, dann im entpackten Ordner starten |
+| „Dateien fehlen“ | ZIP erst entpacken, dann im entpackten Ordner starten |
+| Fehler bei `npm install` | Internetverbindung prüfen und `start.bat` noch einmal starten |
 | „Port 5173 ist schon belegt“ | Fingernote läuft schon in einem anderen Fenster: einfach http://localhost:5173 öffnen |
 
 ## Wo sind meine Notizen?
