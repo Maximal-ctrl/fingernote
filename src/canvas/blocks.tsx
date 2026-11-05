@@ -2,7 +2,6 @@ import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { GripHorizontal, Trash2 } from 'lucide-react';
 import type { Block } from '../db/db';
 import { db } from '../db/db';
-import { renderPdfPage } from '../lib/pdf';
 import { sanitizeHtml } from '../lib/sanitize';
 import { currentParagraph, fire, toggleTag } from './textCommands';
 import type { TagKind } from '../db/repo';
@@ -233,7 +232,7 @@ export const PdfBlockView = memo(function PdfBlockView({ block, zoom }: { block:
   useEffect(() => {
     let live = true;
     const t = setTimeout(() => {
-      renderPdfPage(block.assetId!, block.pdfPage ?? 1, px).then((u) => live && setUrl(u)).catch(() => live && setFailed(true));
+      import('../lib/pdf').then((m) => m.renderPdfPage(block.assetId!, block.pdfPage ?? 1, px)).then((u) => live && setUrl(u)).catch(() => live && setFailed(true));
     }, url ? 250 : 0);
     return () => { live = false; clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps

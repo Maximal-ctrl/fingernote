@@ -8,5 +8,6 @@ export default defineConfig({
   server: { port: 5173, strictPort: true, host: 'localhost' },
   // Gleicher Port wie der Dev-Server: Die Notizen hängen am Origin (localhost:5173).
   preview: { port: 5173, strictPort: true, host: 'localhost', open: true },
-  build: { target: 'es2022', chunkSizeWarningLimit: 2500 },
+  // iPad/Safari ab 15 und alle aktuellen Browser
+  build: { target: ['es2020', 'safari15', 'chrome100', 'firefox100'], chunkSizeWarningLimit: 2500 },
 });

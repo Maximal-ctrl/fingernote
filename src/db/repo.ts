@@ -105,7 +105,7 @@ export async function createPage(sectionId: string, opts: { afterId?: string; le
   if (!section) throw new Error('Abschnitt fehlt');
   const nb = await db.notebooks.get(section.notebookId);
   const pages = await sectionPages(sectionId);
-  let sortOrder = (pages.at(-1)?.sortOrder ?? 0) + 1;
+  let sortOrder = (pages[pages.length - 1]?.sortOrder ?? 0) + 1;
   if (opts.afterId) {
     const i = pages.findIndex((p) => p.id === opts.afterId);
     if (i >= 0) {
@@ -132,7 +132,7 @@ export async function movePageToSection(pageId: string, sectionId: string) {
   const pages = await sectionPages(sectionId);
   await db.pages.update(pageId, {
     sectionId, notebookId: section.notebookId, level: 0,
-    sortOrder: (pages.at(-1)?.sortOrder ?? 0) + 1, updatedAt: now(),
+    sortOrder: (pages[pages.length - 1]?.sortOrder ?? 0) + 1, updatedAt: now(),
   });
 }
 

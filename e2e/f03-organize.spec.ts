@@ -9,6 +9,8 @@ test.describe('F03 Organisieren', () => {
     await page.keyboard.press('Enter');
     await expect(page.getByRole('tab', { name: 'Mathe' })).toHaveAttribute('aria-selected', 'true');
     await page.getByRole('button', { name: 'Seite', exact: true }).click();
+    await expect(page.locator('.pages-col .page-item')).toHaveCount(2);
+    await expect(page.locator('.pages-col .page-item').nth(1)).toHaveAttribute('aria-current', 'page');
     await page.getByLabel('Seitentitel').first().fill('Analysis');
     await page.getByRole('button', { name: /^Analysis/ }).click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Einrücken (Unterseite)' }).click();

@@ -435,6 +435,10 @@ kbd {
 .about-cta { text-align: center; padding: var(--s-8) 0; border-top: 1px solid var(--border); display: grid; justify-items: center; gap: var(--s-4); }
 @media (max-width: 600px) { .about-hero h1 { font-size: var(--fs-xl); line-height: var(--lh-xl); } .about-nav { padding: var(--s-2) var(--s-4); } }
 
+.crash { max-width: 640px; margin: 10vh auto; padding: 0 var(--s-4); display: grid; gap: var(--s-3); }
+.crash h1 { font-size: var(--fs-lg); }
+.crash pre { white-space: pre-wrap; background: var(--surface); padding: var(--s-3); border-radius: var(--r-sm); font-size: var(--fs-xs); }
+
 /* ---------- Responsiv ---------- */
 
 @media (max-width: 900px) {

@@ -1,6 +1,5 @@
 import { db, PAGE_W, type Page, type Block } from '../db/db';
 import { addAsset, createNotebook, createSection } from '../db/repo';
-import { openPdfBytes } from './pdf';
 import { uid } from './ids';
 
 export class PdfImportError extends Error {}
@@ -21,6 +20,7 @@ export async function importPdf(
   const bytes = await file.arrayBuffer();
   let doc;
   try {
+    const { openPdfBytes } = await import('./pdf');
     doc = await openPdfBytes(bytes.slice(0));
   } catch (e) {
     const name = (e as { name?: string })?.name;

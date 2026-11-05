@@ -9,6 +9,25 @@
   </head>
   <body>
     <div id="root"></div>
+    <noscript>Fingernote braucht JavaScript.</noscript>
+    <script>
+      // Fehler vor oder beim Start sichtbar machen statt einer weißen Seite.
+      (function () {
+        function show(msg) {
+          var root = document.getElementById('root');
+          if (!root || root.childElementCount) return;
+          root.innerHTML =
+            '<div style="font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:10vh auto;padding:0 16px;color:#16191f">' +
+            '<h1 style="font-size:22px">Fingernote konnte nicht starten</h1>' +
+            '<p>Bitte diese Meldung weitergeben:</p>' +
+            '<pre style="white-space:pre-wrap;background:#f5f6f8;padding:12px;border-radius:8px;font-size:13px"></pre></div>';
+          root.querySelector('pre').textContent = msg + '\n' + navigator.userAgent;
+        }
+        window.addEventListener('error', function (e) { show('Fehler: ' + (e.message || e.type) + (e.filename ? ' (' + e.filename + ':' + e.lineno + ')' : '')); });
+        window.addEventListener('unhandledrejection', function (e) { show('Fehler: ' + (e.reason && (e.reason.message || e.reason))); });
+        setTimeout(function () { show('Die App hat nach 10 Sekunden noch nichts angezeigt.'); }, 10000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
