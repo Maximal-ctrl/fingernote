@@ -45,6 +45,11 @@ export function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  useEffect(() => {
+    window.__fnMounted = true;
+    window.__fnBoot = 'läuft';
+  }, []);
+
   const close = () => ui.set({ panel: null });
 
   return (

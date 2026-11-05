@@ -11,21 +11,40 @@
     <div id="root"></div>
     <noscript>Fingernote braucht JavaScript.</noscript>
     <script>
-      // Fehler vor oder beim Start sichtbar machen statt einer weißen Seite.
+      // Startdiagnose: statt einer weißen Seite zeigen, wie weit der Start kam und was schiefging.
       (function () {
-        function show(msg) {
+        var log = [];
+        window.__fnBoot = 'html';
+        window.__fnLog = function (m) { log.push(m); };
+        function render(title) {
           var root = document.getElementById('root');
-          if (!root || root.childElementCount) return;
+          if (!root || window.__fnMounted) return;
+          var sw = navigator.serviceWorker && navigator.serviceWorker.controller ? navigator.serviceWorker.controller.scriptURL : 'keiner';
+          var scripts = Array.prototype.map.call(document.querySelectorAll('script[src],link[rel=stylesheet]'), function (n) { return n.src || n.href; }).join('\n  ');
+          var text = title + '\n\nStartphase: ' + window.__fnBoot + '\nMeldungen:\n  ' + (log.join('\n  ') || '(keine)') +
+            '\nService Worker: ' + sw + '\nDateien:\n  ' + scripts + '\nAdresse: ' + location.href + '\n' + navigator.userAgent;
           root.innerHTML =
-            '<div style="font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:10vh auto;padding:0 16px;color:#16191f">' +
+            '<div style="font:16px/1.5 system-ui,sans-serif;max-width:720px;margin:8vh auto;padding:0 16px;color:#16191f">' +
             '<h1 style="font-size:22px">Fingernote konnte nicht starten</h1>' +
-            '<p>Bitte diese Meldung weitergeben:</p>' +
-            '<pre style="white-space:pre-wrap;background:#f5f6f8;padding:12px;border-radius:8px;font-size:13px"></pre></div>';
-          root.querySelector('pre').textContent = msg + '\n' + navigator.userAgent;
+            '<p>Bitte einen Screenshot davon schicken. Tipp: in einem privaten Tab oder ohne Inhaltsblocker probieren.</p>' +
+            '<pre style="white-space:pre-wrap;word-break:break-all;background:#f5f6f8;padding:12px;border-radius:8px;font-size:12px"></pre>' +
+            '<button onclick="location.reload()" style="font:inherit;padding:8px 16px;border-radius:6px;border:0;background:#b5472a;color:#fff">Neu laden</button></div>';
+          root.querySelector('pre').textContent = text;
         }
-        window.addEventListener('error', function (e) { show('Fehler: ' + (e.message || e.type) + (e.filename ? ' (' + e.filename + ':' + e.lineno + ')' : '')); });
-        window.addEventListener('unhandledrejection', function (e) { show('Fehler: ' + (e.reason && (e.reason.message || e.reason))); });
-        setTimeout(function () { show('Die App hat nach 10 Sekunden noch nichts angezeigt.'); }, 10000);
+        // Capture-Phase: fängt auch Dateien, die nicht laden (404, blockiert).
+        window.addEventListener('error', function (e) {
+          var t = e.target;
+          if (t && t !== window && (t.src || t.href)) { log.push('Datei nicht geladen: ' + (t.src || t.href)); render('Eine Datei konnte nicht geladen werden.'); return; }
+          var where = e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ':' + e.colno + ')' : '';
+          log.push('Fehler: ' + (e.message || 'unbekannt') + where + (e.error && e.error.stack ? '\n    ' + String(e.error.stack).split('\n').slice(0, 4).join('\n    ') : ''));
+          // "Script error." ohne Datei kommt meist von einer Browser-Erweiterung: nicht sofort abbrechen.
+          if (e.filename) render('Beim Start ist ein Fehler aufgetreten.');
+        }, true);
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason;
+          log.push('Fehler (async): ' + (r && (r.name ? r.name + ': ' : '') + (r && r.message || r)) + (r && r.stack ? '\n    ' + String(r.stack).split('\n').slice(0, 4).join('\n    ') : ''));
+        });
+        setTimeout(function () { render('Die App hat nach 12 Sekunden noch nichts angezeigt.'); }, 12000);
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
