@@ -4,7 +4,17 @@ Notizen mit Stift und Tastatur, nur auf deinem Gerät. Tippen und von Hand schre
 Notizbücher mit Abschnitten und Unterseiten, PDFs beschriften, Tags, Suche. Läuft im Browser über localhost,
 ohne Konto und ohne Cloud.
 
-## Starten
+## Online benutzen
+
+**https://maximal-ctrl.github.io/fingernote/**: einfach im Browser öffnen, auf jedem Gerät, ohne Installation.
+Wird bei jedem Push auf `main` automatisch neu gebaut und veröffentlicht (`.github/workflows/pages.yml`).
+
+Wichtig: Auch online bleiben die Notizen **im jeweiligen Browser auf dem jeweiligen Gerät**. Es gibt keinen Server und keinen
+Sync: Handy, Laptop und Tablet haben jeweils eigene Notizen. Umziehen zwischen Geräten: Einstellungen → Backup exportieren
+und auf dem anderen Gerät importieren. Notizen von `localhost:5173` erscheinen online ebenfalls nicht automatisch: Backup
+exportieren, online importieren.
+
+## Lokal starten
 
 Voraussetzung: [Node.js](https://nodejs.org) (Version 22 LTS empfohlen, mindestens 20).
 

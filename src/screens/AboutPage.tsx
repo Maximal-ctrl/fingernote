@@ -32,7 +32,7 @@ export function AboutPage() {
           <h1>Notizen mit Stift und Tastatur. Nur auf deinem Gerät.</h1>
           <p className="about-lead">Tippen und von Hand schreiben auf derselben Seite. Kein Konto, kein Sync, der etwas verschluckt.</p>
           <Button variant="primary" onClick={() => navigate('/')}>Jetzt loslegen</Button>
-          <img className="about-shot" src="/screenshot.jpg" alt="Fingernote: eine Seite mit getipptem Text, To-Do-Liste, Handschrift und Pfeil" width={1200} height={750} />
+          <img className="about-shot" src={`${import.meta.env.BASE_URL}screenshot.jpg`} alt="Fingernote: eine Seite mit getipptem Text, To-Do-Liste, Handschrift und Pfeil" width={1200} height={750} />
         </section>
         <section className="about-section">
           <h2>Das Problem</h2>

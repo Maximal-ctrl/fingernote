@@ -37,6 +37,14 @@ Ergebnis: **bereit für den lokalen Start.**
 - Geprüft: 41/41 e2e-Tests gegen `node serve.mjs`; Pfad-Traversal abgewiesen. Unter echtem Windows nicht ausgeführt
   (keine Windows-Umgebung hier), Skript auf Klammern und CRLF geprüft.
 
+## Hosting auf GitHub Pages (2026-11-05)
+
+- Wunsch des Nutzers: dauerhaft, von überall erreichbar. Fingernote ist rein statisch → GitHub Pages, kostenlos für öffentliche Repos.
+- URL: https://maximal-ctrl.github.io/fingernote/ · Workflow `.github/workflows/pages.yml` (npm ci, tsc + vite build mit `BASE_PATH=/fingernote/`, deploy-pages).
+- Geprüft vor dem Push: Build unter `/fingernote/` lokal ausgeliefert, Notiz anlegen, tippen, zeichnen, neu laden, PDF-Import (Worker-Pfad),
+  Bild auf `#/about`: keine 4xx/5xx, keine Konsolenfehler.
+- Grenzen: Daten pro Browser und Gerät (IndexedDB), kein Sync. Origin `maximal-ctrl.github.io` teilen sich alle Pages-Projekte dieses Kontos.
+
 ## Nicht gemacht (bewusst)
 
 | Skill-Schritt | warum nicht |
