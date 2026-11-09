@@ -1,0 +1,19 @@
+{
+  "name": "FingerNote",
+  "short_name": "FingerNote",
+  "description": "Handschriftliche Notizen mit Finger und Apple Pencil – schlicht, offline, ohne Konto und ohne Abo.",
+  "lang": "de",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f6f3",
+  "theme_color": "#f6f6f3",
+  "categories": ["productivity", "education"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
