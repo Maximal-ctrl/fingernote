@@ -7,7 +7,7 @@
  * neuere Programmdateien nach; sie sind beim nächsten Start aktiv.
  * Bei jeder Veröffentlichung VERSION erhöhen.
  */
-const VERSION = 'fingernote-v1.0';
+const VERSION = 'fingernote-v1.01';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/util.js', 'js/db.js', 'js/store.js', 'js/ink.js', 'js/shapes.js', 'js/tools.js',

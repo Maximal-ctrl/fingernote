@@ -7,6 +7,11 @@ import { toast } from './ui.js';
 
 const LAST = 'fingernote.last';
 
+// Immer über die sichere Adresse (https) laden – außer beim lokalen Testen
+if (location.protocol === 'http:' && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
+  location.replace('https://' + location.host + location.pathname + location.search + location.hash);
+}
+
 class App {
   async init() {
     applyTheme();
