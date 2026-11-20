@@ -1,15 +1,15 @@
 /*
  * Service Worker von FingerNote: speichert alle Programmdateien auf dem Gerät,
  * damit die App auch ohne Internet startet. Notizen liegen NICHT hier, sondern
- * im App-Speicher (IndexedDB) – sie verlassen das Gerät nie.
+ * im App-Speicher (IndexedDB) – sie verlassen das Gerät nie (außer zur eigenen OneDrive).
  *
- * Aktualisierung: Die App startet aus dem Gerätespeicher und lädt im Hintergrund
- * neuere Programmdateien nach; sie sind beim nächsten Start aktiv.
+ * Online wird immer zuerst die aktuelle Datei vom Server geholt (so mischen sich nie
+ * alte und neue Programmteile), offline kommt sie aus dem Gerätespeicher.
  * Bei jeder Veröffentlichung VERSION erhöhen.
  */
-const VERSION = 'fingernote-v2.0';
+const VERSION = 'fingernote-v2.01';
 const FILES = [
-  './', 'index.html', 'manifest.webmanifest', 'css/app.css',
+  './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'js/boot.js',
   'js/app.js', 'js/util.js', 'js/db.js', 'js/store.js', 'js/ink.js', 'js/shapes.js', 'js/tools.js',
   'js/ruler.js', 'js/editor.js', 'js/editor-ui.js', 'js/library.js', 'js/ui.js', 'js/icons.js',
   'js/pickers.js', 'js/pdfio.js', 'js/accounts.js', 'js/config.js', 'js/onedrive.js', 'js/world.js',
@@ -18,7 +18,10 @@ const FILES = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
+  // cache: 'reload' umgeht den Browser-Zwischenspeicher – sonst landen alte Dateien im neuen Speicher
+  event.waitUntil(caches.open(VERSION)
+    .then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -35,18 +38,13 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET' || url.origin !== self.location.origin) return;
   event.respondWith((async () => {
     const cache = await caches.open(VERSION);
-    const cached = await cache.match(req, { ignoreSearch: true });
-    const fromNet = fetch(req).then(async (res) => {
-      if (res.ok) await cache.put(req, res.clone());
-      return res;
-    });
-    if (cached) {
-      event.waitUntil(fromNet.catch(() => { /* offline – Gerätespeicher genügt */ }));
-      return cached;
-    }
     try {
-      return await fromNet;
+      const res = await fetch(req, { cache: 'no-cache' });
+      if (res.ok) cache.put(req, res.clone());
+      return res;
     } catch (e) {
+      const cached = await cache.match(req, { ignoreSearch: true });
+      if (cached) return cached;
       return (req.mode === 'navigate' && (await cache.match('index.html'))) || Response.error();
     }
   })());

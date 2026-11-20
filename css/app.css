@@ -550,3 +550,11 @@ input, textarea { font: inherit; color: inherit; -webkit-user-select: text; user
   .card:hover .cover { transform: translateY(-3px); }
   .nav-tabs button:hover:not(.on), .nav-folder:hover:not(.on) { background: var(--surface-3); }
 }
+
+/* Notbremse beim Start */
+.boot-fail { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--bg); text-align: center; }
+.boot-fail > div { max-width: 420px; }
+.boot-fail h1 { font: 700 22px var(--font-d); margin: 0 0 10px; }
+.boot-fail p { color: var(--text-2); margin: 0 0 20px; }
+.boot-fail button { height: 48px; padding: 0 22px; border-radius: 14px; background: var(--text); color: var(--bg); font-weight: 650; }
+.boot-fail small { display: block; margin-top: 16px; color: var(--text-2); font-size: 12px; }
