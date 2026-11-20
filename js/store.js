@@ -213,7 +213,7 @@ export async function search(q) {
 
 // ---------------------------------------------------------------- Backup / Teilen
 /** ids = null → alles; sonst nur diese Notizbücher/Ordner (inkl. Inhalt). */
-export async function exportData(ids = null) {
+export async function exportData(ids = null, extra = null) {
   const allItems = await db.getAll('items');
   let items;
   if (!ids) items = allItems.filter((i) => !i.deleted);
@@ -245,7 +245,7 @@ export async function exportData(ids = null) {
     const b = await db.get('blobs', id);
     if (b) blobs.push({ id, type: b.type, data: arrayBufferToBase64(b.data) });
   }
-  const payload = { app: 'FingerNote', format: 1, version: APP_VERSION, exported: Date.now(), items, pages, blobs };
+  const payload = { app: 'FingerNote', format: 1, version: APP_VERSION, exported: Date.now(), ...(extra || {}), items, pages, blobs };
   return new Blob([JSON.stringify(payload)], { type: 'application/json' });
 }
 

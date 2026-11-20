@@ -6,10 +6,12 @@ Schlicht, modern, offline. Kein Abo, keine Werbung.
 ## Installation auf dem iPad
 1. **https://maximal-ctrl.github.io/fingernote/** in **Safari** öffnen.
 2. **Teilen → Zum Home-Bildschirm → Hinzufügen**.
-3. Beim ersten Start ein Konto mit Namen und 4-stelligem Anmeldecode anlegen.
+3. Beim ersten Start **Konto erstellen**: Name und eigenes Passwort wählen, dazu den **Anmeldecode `1111`**.
+   Danach meldest du dich nur noch mit **Name + Passwort** an.
 
 ## Funktionen
-- **Konten:** mehrere Personen pro Gerät, jede mit eigenem Anmeldecode und eigenen Büchern
+- **Konten:** Anmelden mit Name + Passwort; neue Konten nur mit dem zentralen Anmeldecode (`js/config.js`, `REGISTER_CODE`).
+  Mehrere Personen pro Gerät, jede mit eigenen Büchern. Mit OneDrive auf jedem Gerät abrufbar.
 - **Meine Welt:** alle Ordner und Bücher als Netzwerk rund um dich – antippen, bewegen, zoomen
 - **Ordner** (beliebig verschachtelt) und **Bücher** – wahlweise **mit Seiten** oder als **unendliche Leinwand**
 - **Kapitel** in jedem Buch (wie Abschnitte in OneNote), Seiten zwischen Kapiteln verschiebbar
@@ -38,13 +40,18 @@ Damit sich FingerNote mit OneDrive verbinden darf, braucht es eine eigene „App
    (Alternativ die ID in `js/config.js` eintragen, dann gilt sie für alle Geräte.)
 
 Die Sicherung landet in OneDrive unter **Apps/FingerNote** – eine Datei pro FingerNote-Konto.
+
+**Konto auf einem anderen Gerät öffnen:** Damit das geht, muss die App-ID in `js/config.js`
+(`ONEDRIVE_CLIENT_ID`) stehen. Dann auf dem neuen Gerät einfach mit Name + Passwort anmelden →
+„Konto aus OneDrive holen“ → mit Microsoft anmelden. FingerNote sucht die Sicherung, prüft das
+Passwort und holt Konto und Bücher aufs Gerät.
 Microsoft lässt Anmeldungen von Web-Apps nach etwa 24 Stunden ablaufen; dann zeigt FingerNote
 „OneDrive neu verbinden“ – einmal tippen genügt.
 
 ## Datenschutz
 Alle Notizen liegen im App-Speicher des Geräts (pro Konto getrennt) und – wenn verbunden – in deiner
-eigenen OneDrive. Der Anmeldecode trennt Konten voneinander und schützt vor neugierigen Blicken;
-die Daten selbst sind nicht verschlüsselt.
+eigenen OneDrive. Passwörter werden nur als Hash gespeichert (PBKDF2). Passwort und Anmeldecode schützen den Zugang in der App;
+die Daten selbst sind nicht verschlüsselt. Der Anmeldecode steht im öffentlichen Quelltext.
 
 ## Aktualisieren
 Neue Version hochladen und in `sw.js` die `VERSION` erhöhen (siehe `CLAUDE.md`).

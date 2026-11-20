@@ -6,6 +6,7 @@ import { Editor } from './editor.js';
 import { toast } from './ui.js';
 import * as accounts from './accounts.js';
 import * as od from './onedrive.js';
+import { silently } from './db.js';
 
 // Immer über die sichere Adresse (https) laden – außer beim lokalen Testen
 if (location.protocol === 'http:' && !/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
@@ -30,10 +31,33 @@ class App {
 
     // Anmelden (innerhalb einer Sitzung, z. B. nach der OneDrive-Anmeldung, nicht erneut)
     let acc = accounts.resumeSession();
-    if (oauth && oauth.account) acc = accounts.listAccounts().find((a) => a.id === oauth.account) || acc;
-    if (!acc) acc = await accounts.showLogin();
+    let restored = null, notice = '';
+    if (oauth && oauth.account === '__restore__') {
+      // Konto von einem anderen Gerät über OneDrive holen
+      if (oauth.error) notice = 'OneDrive: ' + oauth.error;
+      else {
+        try { restored = await od.restoreAccount(); acc = restored.account; }
+        catch (e) { notice = e.message; }
+      }
+    } else if (oauth && oauth.account) acc = accounts.listAccounts().find((a) => a.id === oauth.account) || acc;
+    while (!acc) {
+      const r = await accounts.showLogin({ canRestore: !!od.clientId(), notice });
+      notice = '';
+      if (r.account) acc = r.account;
+      else if (r.restore) {
+        try { await od.connect(r.restore); return; } // Weiterleitung zu Microsoft
+        catch (e) { notice = e.message; }
+      }
+    }
     accounts.activate(acc);
     applyTheme();
+    if (restored) {
+      try {
+        await silently(() => store.importData(new File([restored.blob], 'onedrive.json')));
+        saveSettings({ welcomed: true });
+        toast(`Willkommen zurück, ${acc.name} – deine Bücher wurden aus OneDrive geladen.`, { ms: 5000 });
+      } catch (e) { toast('Konto angelegt, aber die Bücher konnten nicht geladen werden: ' + e.message, { ms: 7000 }); }
+    }
 
     try {
       await store.purgeOldTrash();
@@ -55,7 +79,7 @@ class App {
     await this.library.refresh();
     od.startAutoSync();
 
-    if (oauth) {
+    if (oauth && !restored && oauth.account !== '__restore__') {
       if (oauth.ok) { toast('OneDrive verbunden – wird gesichert …'); od.upload().then(() => toast('In OneDrive gesichert')).catch((e) => toast(e.message)); }
       else toast('OneDrive: ' + oauth.error, { ms: 6000 });
       return;

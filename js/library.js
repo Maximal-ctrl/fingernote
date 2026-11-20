@@ -644,17 +644,18 @@ export class Library {
 
   async changePin() {
     const acc = accounts.currentAccount();
-    if (!(await accounts.askPin(acc, 'Aktuellen Code eingeben'))) return;
-    const pin = await accounts.askNewPin();
-    if (!pin) return;
-    await accounts.changePin(acc, pin);
-    toast('Anmeldecode geändert');
+    if (!(await accounts.askPassword(acc, 'Aktuelles Passwort'))) return;
+    const pw = await accounts.askNewPassword();
+    if (!pw) return;
+    await accounts.changePassword(acc, pw);
+    toast('Passwort geändert' + (od.isConnected() ? ' – gilt nach dem nächsten Hochladen auch auf anderen Geräten' : ''));
+    if (od.isConnected()) od.upload().catch(() => {});
   }
 
   async deleteAccount() {
     const acc = accounts.currentAccount();
     if (!(await confirm('Konto löschen?', `Das Konto „${acc.name}“ und alle seine Bücher werden von diesem Gerät gelöscht. Sichere vorher, was du behalten willst.`, 'Weiter', true))) return;
-    if (!(await accounts.askPin(acc, 'Zum Löschen Code eingeben'))) return;
+    if (!(await accounts.askPassword(acc, 'Zum Löschen Passwort eingeben'))) return;
     await accounts.deleteAccount(acc);
     accounts.logout();
   }
@@ -675,7 +676,7 @@ export class Library {
         idInp,
         el('div', { class: 'dlg-inline' }, el('button', { class: 'btn primary sm', onclick: () => { saveSettings({ odClientId: idInp.value.trim() }); close && close(null); if (idInp.value.trim()) this.oneDriveDialog(); } }, 'Speichern')));
     } else if (!connected) {
-      rows.push(el('p', { class: 'muted' }, 'Verbinde dein Microsoft-Konto. FingerNote legt dann im Ordner „Apps/FingerNote“ deiner OneDrive eine Sicherung an und lädt Änderungen automatisch hoch, sobald du online bist.'),
+      rows.push(el('p', { class: 'muted' }, 'Verbinde dein Microsoft-Konto. FingerNote legt dann im Ordner „Apps/FingerNote“ deiner OneDrive eine Sicherung an und lädt Änderungen automatisch hoch, sobald du online bist. Damit kannst du dich auch auf anderen Geräten mit Name und Passwort anmelden.'),
         el('button', { class: 'btn primary wide', onclick: run(() => od.connect()) }, 'Mit OneDrive verbinden'));
     } else {
       rows.push(
@@ -726,7 +727,7 @@ export class Library {
       if (!ok) toast('Tipp: Als App zum Home-Bildschirm hinzufügen – dann bleiben Daten zuverlässig erhalten.');
     });
     const body = el('div', { class: 'settings' },
-      el('div', { class: 'set-account' }, accounts.avatar(acc, 52), el('div', null, el('b', null, acc.name), el('small', { class: 'muted' }, 'Eigenes Konto mit Anmeldecode auf diesem Gerät')),
+      el('div', { class: 'set-account' }, accounts.avatar(acc, 52), el('div', null, el('b', null, acc.name), el('small', { class: 'muted' }, od.isConnected() ? 'Über OneDrive auf jedem Gerät abrufbar' : 'Anmeldung mit Name und Passwort')),
         el('button', { class: 'btn sm', onclick: later(() => this.accountDialog()) }, 'Bearbeiten')),
       el('h3', { class: 'set-h' }, 'Darstellung'),
       row('Design', segmented([['system', 'System'], ['light', 'Hell'], ['dark', 'Dunkel']], st.theme, (v) => { saveSettings({ theme: v }); applyTheme(); this.app.editor.themeChanged(); })),
@@ -739,8 +740,8 @@ export class Library {
       row('Radierer springt zurück', toggle(st.eraserBack, (v) => saveSettings({ eraserBack: v })), 'Nach dem Radieren automatisch wieder das vorige Werkzeug.'),
       row('Tipp-Gesten', toggle(st.tapUndo, (v) => saveSettings({ tapUndo: v })), 'Zwei Finger tippen = Rückgängig, drei Finger = Wiederholen.'),
       el('h3', { class: 'set-h' }, 'Konto & Sicherheit'),
-      row('Anmeldecode ändern', el('button', { class: 'btn sm', onclick: later(() => this.changePin()) }, 'Ändern')),
-      row('Abmelden', el('button', { class: 'btn sm', onclick: () => this.app.lock() }, 'Abmelden'), 'Beim nächsten Öffnen wird der Code abgefragt.'),
+      row('Passwort ändern', el('button', { class: 'btn sm', onclick: later(() => this.changePin()) }, 'Ändern')),
+      row('Abmelden', el('button', { class: 'btn sm', onclick: () => this.app.lock() }, 'Abmelden'), 'Beim nächsten Öffnen werden Name und Passwort abgefragt.'),
       row('Konto löschen', el('button', { class: 'btn sm danger', onclick: later(() => this.deleteAccount()) }, 'Löschen'), 'Entfernt dieses Konto und seine Bücher von diesem Gerät.'),
       el('h3', { class: 'set-h' }, 'Sicherung'),
       row('OneDrive', el('button', { class: 'btn sm primary', onclick: later(() => this.oneDriveDialog()) }, od.isConnected() ? 'Verwalten' : 'Verbinden'),

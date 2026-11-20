@@ -558,3 +558,26 @@ input, textarea { font: inherit; color: inherit; -webkit-user-select: text; user
 .boot-fail p { color: var(--text-2); margin: 0 0 20px; }
 .boot-fail button { height: 48px; padding: 0 22px; border-radius: 14px; background: var(--text); color: var(--bg); font-weight: 650; }
 .boot-fail small { display: block; margin-top: 16px; color: var(--text-2); font-size: 12px; }
+
+/* Anmeldung mit Name + Passwort */
+.login-card { gap: 12px; }
+.login-card .inp { text-align: left; }
+.login-tabs { width: 100%; margin: 2px 0 4px; }
+.login-tabs button { flex: 1; height: 34px; }
+.pw-wrap { position: relative; width: 100%; }
+.pw-wrap .inp { padding-right: 92px; }
+.pw-eye { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); height: 32px; padding: 0 10px; border-radius: 9px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.pw-eye:active { background: var(--surface-2); }
+.code-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 4px 4px 4px 14px; border-radius: 14px; background: var(--accent-soft); }
+.code-label { font-weight: 650; font-size: 14px; color: var(--accent); white-space: nowrap; }
+.code-row .inp.code { flex: 1; text-align: center; letter-spacing: .35em; font-weight: 700; border-color: transparent; }
+.acc-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.acc-chip { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px 0 6px; border-radius: 999px; background: var(--surface-2); font-weight: 600; font-size: 14px; }
+.acc-chip .avatar { font-size: 11px !important; }
+.restore-box { width: 100%; padding: 14px; border-radius: 16px; background: var(--surface-2); text-align: center; font-size: 14px; color: var(--text-2); }
+.restore-box p { margin: 0 0 10px; }
+.login-notice { margin: 0; padding: 10px 12px; border-radius: 12px; background: rgba(229, 72, 77, .1); color: var(--danger); font-size: 13.5px; font-weight: 600; width: 100%; }
+.pw-dlg { display: flex; flex-direction: column; gap: 10px; }
+.pw-dlg .dlg-title { margin-bottom: 4px; }
+.code-row .inp.code::placeholder { letter-spacing: normal; font-weight: 500; }
+.restore-box .btn { background: var(--surface); box-shadow: var(--shadow-1), inset 0 0 0 1.5px var(--accent); color: var(--accent); }

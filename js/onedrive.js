@@ -3,7 +3,7 @@
 // („Apps/FingerNote“) und automatisches Hochladen nach Änderungen, sobald online.
 import { getSettings, saveSettings, uid } from './util.js';
 import { ONEDRIVE_CLIENT_ID } from './config.js';
-import { currentAccount, accountKey } from './accounts.js';
+import { currentAccount, accountKey, portableAccount, checkPassword, createAccount, listAccounts } from './accounts.js';
 import * as store from './store.js';
 import { silently } from './db.js';
 
@@ -34,13 +34,14 @@ export const isConnected = () => !!tokens();
 export const accountInfo = () => (tokens() || {}).user || null;
 
 /** Weiterleitung zur Microsoft-Anmeldung. */
-export async function connect() {
+export async function connect(restore = null) {
   const id = clientId();
   if (!id) throw new Error('Es ist noch keine OneDrive-App-ID eingetragen.');
+  if (restore) sessionStorage.setItem('fingernote.restore', JSON.stringify(restore));
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
   const state = uid() + uid();
-  localStorage.setItem(PENDING, JSON.stringify({ verifier, state, account: currentAccount().id, redirect: redirectUri(), client: id }));
+  localStorage.setItem(PENDING, JSON.stringify({ verifier, state, account: restore ? '__restore__' : currentAccount().id, redirect: redirectUri(), client: id }));
   const q = new URLSearchParams({
     client_id: id, response_type: 'code', redirect_uri: redirectUri(), response_mode: 'query',
     scope: SCOPE, state, code_challenge: challenge, code_challenge_method: 'S256', prompt: 'select_account',
@@ -119,7 +120,7 @@ export async function upload() {
   if (!navigator.onLine) { setStatus({ pending: true }); throw new Error('Offline – wird hochgeladen, sobald du wieder online bist.'); }
   setStatus({ busy: true, error: '' });
   try {
-    const blob = await store.exportData(null);
+    const blob = await store.exportData(null, { account: portableAccount() });
     if (blob.size < 3.5e6) {
       const res = await graph(`${itemPath()}/content`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: blob });
       if (!res.ok) throw new Error(`Hochladen fehlgeschlagen (${res.status})`);
@@ -196,3 +197,39 @@ export function startAutoSync() {
 }
 
 export function setAuto(on) { saveSettings({ odAuto: on }); }
+
+// ---------------------------------------------------------------- Konto auf neuem Gerät holen
+/** Nach der OneDrive-Anmeldung: Sicherung mit passendem Namen suchen, Passwort prüfen, Konto anlegen. */
+export async function restoreAccount() {
+  let req = null;
+  try { req = JSON.parse(sessionStorage.getItem('fingernote.restore') || 'null'); } catch (e) { /* */ }
+  sessionStorage.removeItem('fingernote.restore');
+  const tmp = localStorage.getItem('fingernote.od.__restore__');
+  localStorage.removeItem('fingernote.od.__restore__');
+  if (!req || !tmp) throw new Error('Die Anmeldung bei OneDrive ist abgelaufen – bitte erneut versuchen.');
+  const t = JSON.parse(tmp);
+  const auth = { Authorization: `Bearer ${t.access}` };
+  const res = await fetch(`${GRAPH}/me/drive/special/approot/children?$select=name,id&$top=200`, { headers: auth });
+  if (!res.ok) throw new Error(`OneDrive antwortet nicht (${res.status})`);
+  const files = ((await res.json()).value || []).filter((f) => /^FingerNote-.*\.json$/.test(f.name));
+  const want = req.name.trim().toLowerCase();
+  let found = null, wrongPw = false;
+  for (const f of files) {
+    const meta = await fetch(`${GRAPH}/me/drive/items/${f.id}?$select=@microsoft.graph.downloadUrl`, { headers: auth }).then((r) => r.json());
+    const url = meta['@microsoft.graph.downloadUrl'];
+    if (!url) continue;
+    const blob = await fetch(url).then((r) => r.blob());
+    let data;
+    try { data = JSON.parse(await blob.text()); } catch (e) { continue; }
+    const a = data.account;
+    if (!a || (a.name || '').trim().toLowerCase() !== want) continue;
+    if (!(await checkPassword(a, req.password))) { wrongPw = true; continue; }
+    found = { a, blob };
+    break;
+  }
+  if (!found) throw new Error(wrongPw ? 'Das Konto wurde gefunden, aber das Passwort stimmt nicht.' : `In dieser OneDrive gibt es kein FingerNote-Konto „${req.name}“.`);
+  if (listAccounts().some((x) => x.id === found.a.id)) throw new Error('Dieses Konto ist auf diesem Gerät schon vorhanden.');
+  const acc = await createAccount(found.a.name, null, found.a.color, found.a);
+  localStorage.setItem(`fingernote.od.${acc.id}`, JSON.stringify(t));
+  return { account: acc, blob: found.blob };
+}
