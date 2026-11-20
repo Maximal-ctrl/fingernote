@@ -1,5 +1,5 @@
 // Editor: Seitenansicht, Zoom/Scrollen, Eingabe (Finger, Apple Pencil, Maus), Verlauf, Speichern.
-import { uid, clamp, round2, debounce, getSettings, saveSettings, el } from './util.js';
+import { uid, clamp, round2, debounce, getSettings, saveSettings, el, isDarkUI } from './util.js';
 import * as ink from './ink.js';
 import * as store from './store.js';
 import { createAction, FINGER_TOOLS } from './tools.js';
@@ -16,6 +16,7 @@ export const DEFAULT_TOOLS = {
   eraser: { mode: 'stroke', markerOnly: false, sizes: [8, 18, 36], si: 1 },
   tape: { colors: ['#f6c945', '#8fd3c7', '#b9a6f5', '#f4a3a3'], ci: 0, widths: [22, 34, 50], wi: 1 },
   text: { size: 20 },
+  lasso: { strokes: true, texts: true, images: true },
 };
 
 export class Editor {
@@ -87,6 +88,8 @@ export class Editor {
   setTool(name) {
     if (this.editing && name !== 'text') this.finishTextEdit();
     if (name !== 'lasso') this.clearSelection();
+    if (name !== this.tool && this.tool !== 'eraser') this.prevTool = this.tool;
+    this.dropper = null;
     this.tool = name;
     this.ui.refreshTool();
     this.requestLive();
@@ -119,9 +122,13 @@ export class Editor {
     const data = await store.loadNotebook(nbId);
     if (!data) { toast('Notizbuch nicht gefunden.'); return false; }
     this.nb = data.nb;
-    this.pages = data.pages;
-    this.pages.forEach((p) => { p._v = 0; });
-    this.knownIds = new Set(this.pages.map((p) => p.id));
+    this.all = data.pages;
+    this.all.forEach((p) => { p._v = 0; });
+    this.knownIds = new Set(this.all.map((p) => p.id));
+    const target = pageId && this.all.find((p) => p.id === pageId);
+    const secs = this.nb.sections;
+    this.sec = target ? target.sec : (secs.find((x) => x.id === this.nb.lastSec) || secs[0]).id;
+    this.pages = this.secPages(this.sec);
     this.history = { undo: [], redo: [] };
     this.dirty.clear();
     this.changed = false;
@@ -133,6 +140,7 @@ export class Editor {
     this.relayout();
     this.resize();
     this.fit();
+    this.ui.refreshChapter();
     if (pageId) {
       const i = this.pages.findIndex((p) => p.id === pageId);
       if (i >= 0) this.goToPage(i);
@@ -155,15 +163,99 @@ export class Editor {
     this.ruler.hide();
     this.nb = null;
     this.pages = [];
+    this.all = [];
     this.layout = [];
+  }
+
+  // ------------------------------------------------------------ Kapitel
+  get canvasMode() { return !!(this.nb && this.nb.mode === 'canvas'); }
+  get infinite() { return !!(this.pages[0] && this.pages[0].infinite); }
+  secPages(id) { return this.all.filter((p) => p.sec === id); }
+  section() { return this.nb.sections.find((x) => x.id === this.sec) || this.nb.sections[0]; }
+
+  mergeSection(next) {
+    const first = this.all.findIndex((p) => p.sec === this.sec);
+    const others = this.all.filter((p) => p.sec !== this.sec);
+    const at = first < 0 ? others.length : this.all.slice(0, first).filter((p) => p.sec !== this.sec).length;
+    others.splice(at, 0, ...next);
+    this.all = others;
+  }
+
+  switchSection(id, keepView) {
+    if (!this.nb.sections.some((x) => x.id === id)) return;
+    this.finishTextEdit();
+    this.clearSelection();
+    this.sec = id;
+    this.nb.lastSec = id;
+    this.nbDirty = true;
+    this.scheduleSave();
+    this.pages = this.secPages(id);
+    this.relayout();
+    if (!keepView) this.fit();
+    this.ui.refreshChapter();
+    this.ui.refreshSidebar();
+    this.requestRender();
+  }
+
+  addSection(name) {
+    const sec = store.newSection(this.nb.sections.length, name);
+    this.nb.sections = [...this.nb.sections, sec];
+    const ref = this.pages[0];
+    const p = store.newPage(this.nb.id, {
+      template: ref && !ref.bg ? ref.template : (this.nb.defaults || {}).template || 'lined',
+      paper: ref ? ref.paper : 'white',
+      format: ref && ref.w > ref.h ? 'landscape' : (ref && ref.endless ? 'endless' : 'portrait'),
+      sec: sec.id, infinite: this.canvasMode,
+    });
+    p._v = 0;
+    this.all = [...this.all, p];
+    this.nbDirty = true;
+    this.switchSection(sec.id);
+    return sec;
+  }
+
+  renameSection(id, name, color) {
+    this.nb.sections = this.nb.sections.map((x) => (x.id === id ? { ...x, name: name || x.name, color: color || x.color } : x));
+    this.nbDirty = true;
+    this.scheduleSave();
+    this.ui.refreshChapter();
+    this.ui.refreshSidebar();
+  }
+
+  deleteSection(id) {
+    if (this.nb.sections.length <= 1) return false;
+    const idx = this.nb.sections.findIndex((x) => x.id === id);
+    this.nb.sections = this.nb.sections.filter((x) => x.id !== id);
+    this.all = this.all.filter((p) => p.sec !== id);
+    this.history = { undo: [], redo: [] };
+    this.ui.updateUndo();
+    this.nbDirty = true;
+    this.switchSection(this.nb.sections[Math.max(0, idx - 1)].id);
+    return true;
+  }
+
+  movePageToSection(page, secId) {
+    if (page.sec === secId) return;
+    if (this.pages.length <= 1) { toast('Die letzte Seite eines Kapitels kann nicht verschoben werden.'); return; }
+    page.sec = secId;
+    this.pages = this.secPages(this.sec);
+    this.history = { undo: [], redo: [] };
+    this.ui.updateUndo();
+    this.markDirty(page);
+    this.nbDirty = true;
+    this.relayout();
+    this.clampView();
+    this.ui.refreshSidebar();
+    this.requestRender();
   }
 
   async makeThumb() {
     try {
-      const p = this.pages[0];
+      const p = this.secPages(this.nb.sections[0].id)[0] || this.all[0];
       await ink.ensureImages(p);
       const c = document.createElement('canvas');
-      ink.renderPageToCanvas(c, p, 300 / p.w);
+      const R = ink.pageRegion(p);
+      ink.renderPageToCanvas(c, p, 300 / R.w, { region: R });
       this.nb.thumb = c.toDataURL('image/jpeg', 0.72);
       c.width = c.height = 0;
       await store.saveItem(this.nb);
@@ -176,17 +268,17 @@ export class Editor {
   async save() {
     if (!this.nb) return;
     if (this.saving) { this.saveAgain = true; return this.saving; }
-    const cur = new Set(this.pages.map((p) => p.id));
-    for (const p of this.pages) if (!this.knownIds.has(p.id)) this.dirty.add(p);
+    const cur = new Set(this.all.map((p) => p.id));
+    for (const p of this.all) if (!this.knownIds.has(p.id)) this.dirty.add(p);
     const removed = [...this.knownIds].filter((id) => !cur.has(id));
     const dirty = [...this.dirty].filter((p) => cur.has(p.id));
     if (!dirty.length && !removed.length && !this.nbDirty) { this.ui.setSaveState('saved'); return; }
     this.dirty.clear();
     this.nbDirty = false;
     const nb = this.nb;
-    nb.pages = this.pages.map((p) => p.id);
+    nb.pages = this.all.map((p) => p.id);
     nb.updated = Date.now();
-    nb.idx = store.buildIndex(this.pages);
+    nb.idx = store.buildIndex(this.all);
     this.ui.setSaveState('saving');
     this.saving = (async () => {
       try {
@@ -211,6 +303,7 @@ export class Editor {
     let y = 0;
     this.maxW = 0;
     this.layout = this.pages.map((p) => {
+      if (p.infinite) { this.maxW = p.w; return { page: p, x: 0, y: 0 }; }
       const L = { page: p, x: -p.w / 2, y };
       y += p.h + GAP;
       this.maxW = Math.max(this.maxW, p.w);
@@ -230,7 +323,7 @@ export class Editor {
 
   resize() {
     // War auf Seitenbreite gezoomt? Dann nach Drehen des iPads wieder einpassen.
-    const wasFit = this.W && Math.abs(this.view.s / this.fitScale() - 1) < 0.02;
+    const wasFit = this.W && !this.infinite && Math.abs(this.view.s / this.fitScale() - 1) < 0.02;
     const keepIdx = wasFit ? this.currentIndex() : -1;
     const r = this.stage.getBoundingClientRect();
     this.rect = r;
@@ -243,13 +336,13 @@ export class Editor {
       c.style.width = this.W + 'px';
       c.style.height = this.H + 'px';
     }
-    this.deskColor = getComputedStyle(this.root).getPropertyValue('--desk').trim() || '#e8e8e3';
+    this.applyPageTheme();
     if (this.ruler.visible) this.ruler.update();
     if (keepIdx >= 0) {
       this.view.s = this.fitScale();
       this.view.tx = this.W / 2;
       const L = this.layout[keepIdx];
-      if (L) this.view.ty = 18 - L.y * this.view.s;
+      if (L) this.view.ty = this.topInset() - L.y * this.view.s;
     }
     this.clampView();
     this.requestRender();
@@ -257,31 +350,61 @@ export class Editor {
 
   themeChanged() { if (this.isOpen) this.resize(); }
 
-  fitScale() { return clamp((this.W - 40) / (this.maxW || 1000), 0.15, 1.6); }
-  minScale() { return Math.min(this.fitScale() * 0.3, 0.3); }
+  /** Dunkle Seiten: Zeichenfläche wird per Filter invertiert (Farben bleiben erkennbar). */
+  applyPageTheme() {
+    const inv = !!getSettings().darkPages && isDarkUI();
+    this.stage.classList.toggle('invert', inv);
+    const desk = getComputedStyle(this.root).getPropertyValue(inv ? '--desk-inv' : '--desk').trim();
+    this.deskColor = desk || '#e8e8e3';
+  }
+
+  /** Platz für die schwebenden Leisten oben. */
+  topInset() { return this.ui.topInset ? this.ui.topInset() : 18; }
+
+  fitScale() {
+    if (this.infinite) return clamp((this.W - 40) / 1000, 0.5, 1.2);
+    return clamp((this.W - 40) / (this.maxW || 1000), 0.15, 1.6);
+  }
+  minScale() { return this.infinite ? 0.08 : Math.min(this.fitScale() * 0.3, 0.3); }
 
   fit() {
+    if (this.infinite) { this.fitCanvas(); return; }
     const idx = this.currentIndex();
     this.view.s = this.fitScale();
     this.view.tx = this.W / 2;
     this.goToPage(idx);
   }
 
+  /** Leinwand: den ganzen Inhalt zeigen. */
+  fitCanvas() {
+    const p = this.pages[0];
+    const R = ink.pageRegion(p, 40);
+    const top = this.topInset();
+    const empty = !p.strokes.length && !p.texts.length && !p.images.length;
+    const s = empty ? this.fitScale() : clamp(Math.min((this.W - 40) / R.w, (this.H - top - 60) / R.h), 0.1, 1.2);
+    this.view.s = s;
+    this.view.tx = this.W / 2 - (R.x + R.w / 2) * s;
+    this.view.ty = empty ? top + 20 : top + (this.H - top - 40) / 2 - (R.y + R.h / 2) * s;
+    this.requestRender();
+  }
+
   goToPage(i) {
+    if (this.infinite) { this.fitCanvas(); return; }
     const L = this.layout[clamp(i, 0, this.layout.length - 1)];
     if (!L) return;
-    this.view.ty = 18 - L.y * this.view.s;
+    this.view.ty = this.topInset() - L.y * this.view.s;
     this.clampView();
     this.requestRender();
   }
 
   clampView(v = this.view) {
+    if (this.infinite) return;
     const s = v.s;
     const cw = this.maxW * s;
     if (cw <= this.W - 24) v.tx = this.W / 2;
     else v.tx = clamp(v.tx, this.W - 12 - (this.maxW / 2) * s, 12 + (this.maxW / 2) * s);
     const ch = this.contentH * s;
-    const top = 18, bottom = 64;
+    const top = this.topInset(), bottom = 64;
     if (ch <= this.H - top - bottom) v.ty = top;
     else v.ty = clamp(v.ty, this.H - bottom - ch, top);
   }
@@ -308,6 +431,7 @@ export class Editor {
     const { ty, s } = this.view;
     const out = [];
     for (const L of this.layout) {
+      if (L.page.infinite) { out.push(L); continue; }
       const y0 = ty + L.y * s, y1 = y0 + L.page.h * s;
       if (y1 < -40) continue;
       if (y0 > this.H + 40) break;
@@ -317,7 +441,7 @@ export class Editor {
   }
 
   currentIndex() {
-    if (!this.layout.length) return 0;
+    if (!this.layout.length || this.infinite) return 0;
     const wy = (this.H * 0.4 - this.view.ty) / this.view.s;
     let best = 0, bd = Infinity;
     this.layout.forEach((L, i) => {
@@ -333,6 +457,7 @@ export class Editor {
   hitPage(sx, sy, margin = 0) {
     const { tx, ty, s } = this.view;
     const wx = (sx - tx) / s, wy = (sy - ty) / s;
+    if (this.infinite && this.layout[0]) return { L: this.layout[0], x: wx, y: wy };
     for (const L of this.layout) {
       const p = L.page;
       if (wy < L.y - margin) break;
@@ -356,7 +481,7 @@ export class Editor {
   pageTransform(ctx, L, clip) {
     const { tx, ty, s } = this.view, d = this.dpr;
     ctx.setTransform(d * s, 0, 0, d * s, d * (tx + L.x * s), d * (ty + L.y * s));
-    if (clip) { ctx.beginPath(); ctx.rect(0, 0, L.page.w, L.page.h); ctx.clip(); }
+    if (clip && !L.page.infinite) { ctx.beginPath(); ctx.rect(0, 0, L.page.w, L.page.h); ctx.clip(); }
   }
 
   // ------------------------------------------------------------ Zeichnen
@@ -411,6 +536,15 @@ export class Editor {
     const want = s * d;
     for (const L of this.visible()) {
       const p = L.page;
+      if (p.infinite) {
+        ctx.save();
+        this.pageTransform(ctx, L, false);
+        const vis = { x0: -tx / s, y0: -ty / s, x1: (this.W - tx) / s, y1: (this.H - ty) / s };
+        ink.drawPaper(ctx, p, vis);
+        ink.drawContent(ctx, p, { vis, skip: this.skipPage === p ? this.skip : null, editing: this.editing && this.editing.t.id });
+        ctx.restore();
+        continue;
+      }
       const x = tx + L.x * s, y = ty + L.y * s, w = p.w * s, h = p.h * s;
       ctx.setTransform(d, 0, 0, d, 0, 0);
       ctx.fillStyle = 'rgba(0,0,0,0.045)';
@@ -449,6 +583,7 @@ export class Editor {
     const want = this.view.s * this.dpr;
     for (const L of this.visible()) {
       const p = L.page;
+      if (p.infinite) continue;
       const target = Math.min(want, this.capRes(p));
       const c = this.cacheFresh(p);
       if (!c || c.res < target * 0.9 || c.res > target * 2.5) {
@@ -640,6 +775,8 @@ export class Editor {
 
   applyEntry(e, which) {
     this.clearSelection();
+    const secOf = e.k === 'content' ? e.page.sec : e.k === 'pages' ? e.sec : e.items[0] && e.items[0].page.sec;
+    if (secOf && secOf !== this.sec) this.switchSection(secOf, true);
     if (e.k === 'content') {
       const st = e[which];
       e.page.strokes = st.strokes;
@@ -648,6 +785,7 @@ export class Editor {
       this.contentChanged(e.page, true);
     } else if (e.k === 'pages') {
       this.pages = e[which].slice();
+      this.mergeSection(this.pages);
       this.pagesChanged();
     } else if (e.k === 'props') {
       for (const it of e.items) { Object.assign(it.page, it[which]); this.contentChanged(it.page, false); }
@@ -673,7 +811,8 @@ export class Editor {
   setPages(next) {
     const before = this.pages.slice();
     this.pages = next;
-    this.pushHistory({ k: 'pages', before, after: next.slice() });
+    this.mergeSection(next);
+    this.pushHistory({ k: 'pages', sec: this.sec, before, after: next.slice() });
     this.pagesChanged();
   }
 
@@ -684,7 +823,7 @@ export class Editor {
     if (ref) format = ref.endless ? 'endless' : ref.w > ref.h ? 'landscape' : 'portrait';
     const template = opts.template || (ref && !ref.bg ? ref.template : d.template || 'lined');
     const paper = opts.paper || (ref ? ref.paper : d.paper || 'white');
-    const p = store.newPage(this.nb.id, { template, paper, format: opts.format || format });
+    const p = store.newPage(this.nb.id, { template, paper, format: opts.format || format, sec: this.sec });
     p._v = 0;
     const next = this.pages.slice();
     next.splice(afterIdx + 1, 0, p);
@@ -753,11 +892,127 @@ export class Editor {
   }
 
   async insertPages(pageObjs, afterIdx = this.currentIndex()) {
-    const objs = pageObjs.map((o) => ({ ...store.newPage(this.nb.id, { template: 'blank' }), ...o, _v: 0 }));
+    if (this.infinite) { this.placePdfOnCanvas(pageObjs); return; }
+    const objs = pageObjs.map((o) => ({ ...store.newPage(this.nb.id, { template: 'blank', sec: this.sec }), ...o, _v: 0 }));
     const next = this.pages.slice();
     next.splice(afterIdx + 1, 0, ...objs);
     this.setPages(next);
     this.goToPage(afterIdx + 1);
+  }
+
+  /** PDF auf der Leinwand: Seiten als gesperrte Bilder untereinander. */
+  placePdfOnCanvas(pageObjs) {
+    const L = this.layout[0], page = L.page;
+    const before = this.snap(page);
+    const c = this.toPage(L, this.W / 2, this.topInset() + 40);
+    let y = c.y;
+    const imgs = pageObjs.map((o) => {
+      const w = 800, h = (w * o.h) / o.w;
+      const im = { id: uid(), blob: o.bg, x: round2(c.x - w / 2), y: round2(y), w, h: round2(h), layer: 'back', lock: true };
+      y += h + 40;
+      return im;
+    });
+    page.images = [...page.images, ...imgs];
+    this.pushContent(page, before);
+    toast('PDF eingefügt – die Seiten sind gesperrt, damit du direkt darauf schreiben kannst.');
+  }
+
+  /** Bilder/Textfelder sperren oder entsperren, Bilder vor/hinter den Text legen. */
+  setItemProps(page, ids, props, kinds = ['images', 'texts']) {
+    const before = this.snap(page);
+    for (const k of kinds) page[k] = page[k].map((o) => (ids.has(o.id) ? { ...o, ...props } : o));
+    this.pushContent(page, before);
+  }
+
+  lockSelection(lock) {
+    const sel = this.selection;
+    if (!sel) return;
+    const page = sel.L.page, ids = sel.ids;
+    this.setItemProps(page, ids, { lock });
+    if (lock) { this.clearSelection(); toast('Gesperrt – zum Entsperren mit dem Lasso antippen'); }
+    else this.ui.selectionChanged();
+  }
+
+  layerSelection(layer) {
+    const sel = this.selection;
+    if (!sel) return;
+    this.setItemProps(sel.L.page, sel.ids, { layer }, ['images']);
+    this.ui.selectionChanged();
+    toast(layer === 'front' ? 'Bild liegt jetzt vor dem Text' : 'Bild liegt jetzt hinter dem Text');
+  }
+
+  /** Pipette: nächstes Antippen der Seite nimmt die Farbe auf. */
+  startDropper(cb) {
+    this.dropper = cb;
+    toast('Pipette: Tippe auf eine Farbe auf der Seite');
+  }
+
+  pickColorAt(sx, sy) {
+    try {
+      const d = this.dpr;
+      const px = this.bctx.getImageData(Math.round(sx * d), Math.round(sy * d), 1, 1).data;
+      return '#' + [px[0], px[1], px[2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+    } catch (e) { return null; }
+  }
+
+  /** Wegkritzeln: Zickzack über Schrift löscht die getroffenen Striche. */
+  scribbleErase(page, stroke) {
+    const pts = stroke.pts, n = pts.length / 3;
+    if (n < 14) return false;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, len = 0;
+    for (let i = 0; i < n; i++) {
+      const x = pts[i * 3], y = pts[i * 3 + 1];
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+      if (i) len += Math.hypot(x - pts[i * 3 - 3], y - pts[i * 3 - 2]);
+    }
+    const horiz = x1 - x0 >= y1 - y0;
+    const span = Math.max(x1 - x0, y1 - y0);
+    if (span < 20 || len < span * 3.2) return false;
+    let dir = 0, flips = 0, anchor = horiz ? pts[0] : pts[1];
+    for (let i = 1; i < n; i++) {
+      const v = horiz ? pts[i * 3] : pts[i * 3 + 1];
+      const dv = v - anchor;
+      if (Math.abs(dv) < Math.max(4, span * 0.12)) continue;
+      const sd = Math.sign(dv);
+      if (dir && sd !== dir) flips++;
+      dir = sd; anchor = v;
+    }
+    if (flips < 4) return false;
+    const hit = new Set();
+    for (const o of page.strokes) {
+      const b = ink.geom(o).bbox;
+      if (b.x1 < x0 || b.x0 > x1 || b.y1 < y0 || b.y0 > y1) continue;
+      for (let i = 0; i < n; i += 2) {
+        if (ink.strokeHit(o, pts[i * 3], pts[i * 3 + 1], 2)) { hit.add(o.id); break; }
+      }
+    }
+    if (!hit.size) return false;
+    const before = this.snap(page);
+    page.strokes = page.strokes.filter((o) => !hit.has(o.id));
+    this.pushContent(page, before);
+    toast('Weggekritzelt', { action: { label: 'Rückgängig', run: () => this.undo() } });
+    return true;
+  }
+
+  /** Lieblingsstifte */
+  savePreset() {
+    const pen = this.toolState.pen;
+    const preset = { type: pen.type, c: pen.colors[pen.ci], w: pen.widths[pen.wi] };
+    const list = (getSettings().presets || []).filter((x) => !(x.type === preset.type && x.c === preset.c && x.w === preset.w));
+    list.unshift(preset);
+    saveSettings({ presets: list.slice(0, 6) });
+    toast('Als Lieblingsstift gespeichert');
+  }
+
+  applyPreset(pr) {
+    const pen = this.toolState.pen;
+    pen.type = pr.type;
+    let ci = pen.colors.indexOf(pr.c);
+    if (ci < 0) { pen.colors[pen.ci] = pr.c; ci = pen.ci; }
+    pen.ci = ci;
+    pen.widths[pen.wi] = pr.w;
+    this.saveToolState();
+    this.setTool('pen');
   }
 
   // ------------------------------------------------------------ Auswahl
@@ -997,7 +1252,8 @@ export class Editor {
     const size = this.toolState.text.size;
     let w = Math.min(640, page.w - x - 30);
     let x0 = x;
-    if (w < 240) { w = 240; x0 = Math.max(20, page.w - 30 - w); }
+    if (page.infinite) w = 560;
+    else if (w < 240) { w = 240; x0 = Math.max(20, page.w - 30 - w); }
     const nt = { id: uid(), x: round2(x0), y: round2(y - size * 0.75), w: round2(w), size, c: this.textColor(), text: '' };
     this.startTextEdit(L, nt, true);
   }
@@ -1145,8 +1401,8 @@ export class Editor {
     let ih = (iw * h) / w;
     if (ih > page.h * 0.6) { ih = page.h * 0.6; iw = (ih * w) / h; }
     const c = this.toPage(L, this.W / 2, this.H / 2);
-    const x = clamp(c.x - iw / 2, 10, page.w - iw - 10);
-    const y = clamp(c.y - ih / 2, 10, Math.max(10, page.h - ih - 10));
+    const x = page.infinite ? c.x - iw / 2 : clamp(c.x - iw / 2, 10, page.w - iw - 10);
+    const y = page.infinite ? c.y - ih / 2 : clamp(c.y - ih / 2, 10, Math.max(10, page.h - ih - 10));
     const im = { id: uid(), blob: id, x: round2(x), y: round2(y), w: round2(iw), h: round2(ih) };
     const before = this.snap(page);
     page.images = [...page.images, im];
@@ -1194,6 +1450,14 @@ export class Editor {
     if (this.editing) this.finishTextEdit();
     closePopover();
     const pt = this.evPt(e);
+    if (this.dropper) {
+      const c = this.pickColorAt(pt.sx, pt.sy);
+      const cb = this.dropper;
+      this.dropper = null;
+      if (c) cb(c);
+      this.ignored.add(e.pointerId);
+      return;
+    }
     if (pt.type === 'touch') {
       if (this.penDown || pt.t - this.lastPenT < 350) { this.ignored.add(e.pointerId); return; }
       if (e.width && Math.max(e.width, e.height) > 120) { this.ignored.add(e.pointerId); return; }
@@ -1316,6 +1580,7 @@ export class Editor {
     this.action = null;
     this.mode = null;
     if (a) a.end(pt || {});
+    if (a && a.erases && this.tool === 'eraser' && getSettings().eraserBack) this.setTool(this.prevTool || 'pen');
     this.requestLive();
   }
 

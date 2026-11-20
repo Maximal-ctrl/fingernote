@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <!-- Sicherheit: nur eigene Dateien laden, keine fremden Skripte, keine Weitergabe der Adresse -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' data: blob: https://login.microsoftonline.com https://graph.microsoft.com https://*.1drv.com https://*.sharepoint.com https://*.livefilestore.com https://api.onedrive.com https://onedrive.live.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; upgrade-insecure-requests">
   <meta name="referrer" content="no-referrer">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>FingerNote</title>
   <meta name="description" content="FingerNote – handschriftliche Notizen mit Finger und Apple Pencil. Modern, schlicht, offline, ohne Konto und ohne Abo.">
-  <meta name="theme-color" content="#f6f6f3">
+  <meta name="theme-color" content="#f4f4f2">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -20,7 +20,8 @@
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body class="loading">
-  <div id="library" class="screen"></div>
+  <div id="login" class="screen" hidden></div>
+  <div id="library" class="screen" hidden></div>
   <div id="editor" class="screen" hidden></div>
   <div id="overlay"></div>
   <noscript><p style="padding:24px;font-family:system-ui">FingerNote benötigt JavaScript.</p></noscript>

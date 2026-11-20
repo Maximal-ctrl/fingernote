@@ -1,56 +1,53 @@
-# FingerNote
+# FingerNote 2.0
 
 Handschriftliche Notizen auf dem iPad – mit dem **Finger** oder dem **Apple Pencil**.
-Eine eigene, schlichte Alternative zu GoodNotes und OneNote: kein Konto, kein Abo, keine Werbung,
-alles läuft offline und bleibt auf dem Gerät.
+Schlicht, modern, offline. Kein Abo, keine Werbung.
 
 ## Installation auf dem iPad
-1. Die GitHub-Pages-Adresse dieses Repos in **Safari** öffnen (z. B. `https://maximal-ctrl.github.io/fingernote/`).
+1. **https://maximal-ctrl.github.io/fingernote/** in **Safari** öffnen.
 2. **Teilen → Zum Home-Bildschirm → Hinzufügen**.
-3. FingerNote über das neue Symbol starten – im Vollbild und auch ohne Internet.
+3. Beim ersten Start ein Konto mit Namen und 4-stelligem Anmeldecode anlegen.
 
 ## Funktionen
-- **Bibliothek:** Ordner (auch verschachtelt), Notizbücher mit Vorschau, Favoriten, „Zuletzt“, Sortierung,
-  Suche in Namen **und** getippten Texten, Papierkorb (30 Tage)
-- **Notizbücher:** Vorlagen Blanko, Liniert, Kariert, Punktiert, Cornell, Notenpapier · Papier Weiß, Creme, Grau, Dunkel ·
-  A4 hoch, A4 quer oder **Endlos** (die Seite wächst beim Schreiben mit)
-- **Stift:** Füller (druckempfindlich mit Apple Pencil, mit dem Finger über die Geschwindigkeit), Fineliner, Regenbogen-Stift
-- **Textmarker** liegt immer *unter* der Schrift, optional mit geraden Linien
-- **Zeichnen & halten** → saubere Linie, Kreis, Ellipse, Rechteck, Dreieck, Vieleck; eigenes Formen-Werkzeug
-- **Radierer:** ganze Striche oder teilweise, optional nur Textmarker
-- **Lasso:** einkreisen oder antippen, verschieben, skalieren, kopieren, ausschneiden, einfügen, duplizieren, umfärben, löschen
-- **Text** mit Markdown: Überschriften, **fett**, *kursiv*, ~~durchgestrichen~~, ==markiert==, Listen und
-  **abhakbare Checklisten**; Apple-Pencil-Scribble funktioniert in Textfeldern
-- **Lernband** zum Abdecken und Lernen (antippen zum Aufdecken), im Export ausblendbar
-- **Lineal** (verschieben/drehen, Striche rasten an der Kante ein), **Laserpointer** zum Präsentieren
-- **Bilder** einfügen, **PDFs importieren** und beschriften
-- **Export:** Notizbuch oder Seite als PDF, Seite als Bild, FingerNote-Datei zum Weitergeben
-- **Seiten:** Seitenleiste mit Vorschaubildern, Lesezeichen, duplizieren, verschieben, Vorlage ändern
-- **Gesten:** 2 Finger tippen = Rückgängig, 3 Finger = Wiederholen, 2 Finger = scrollen/zoomen (rastet bei Seitenbreite ein)
-- Hell/Dunkel, Vollbild-Schreiben, Tastaturkürzel für Magic Keyboard
+- **Konten:** mehrere Personen pro Gerät, jede mit eigenem Anmeldecode und eigenen Büchern
+- **Meine Welt:** alle Ordner und Bücher als Netzwerk rund um dich – antippen, bewegen, zoomen
+- **Ordner** (beliebig verschachtelt) und **Bücher** – wahlweise **mit Seiten** oder als **unendliche Leinwand**
+- **Kapitel** in jedem Buch (wie Abschnitte in OneNote), Seiten zwischen Kapiteln verschiebbar
+- **PDFs** als Buch importieren oder in ein Buch einfügen – jede Seite direkt beschreibbar
+- **Bilder** einfügen, **sperren**, **vor oder hinter den Text** legen
+- Stift (druckempfindlich), Fineliner, Regenbogen, **Lieblingsstifte**, **Pipette**
+- Textmarker unter der Schrift, Formerkennung durch Halten, **Wegkritzeln zum Löschen**
+- Radierer (ganz/teilweise/nur Textmarker, springt auf Wunsch zum Stift zurück)
+- Lasso mit Filter (Schrift/Text/Bilder), Text mit Markdown und Checklisten, Lernband, Lineal, Laserpointer
+- **Dunkle Seiten** im Dunkelmodus, Vollbild-Schreiben, Gesten (2/3 Finger tippen = Rückgängig/Wiederholen)
+- **OneDrive-Sicherung** (automatisch, sobald online) und Sicherung als Datei
+- Export als PDF, Bild oder FingerNote-Datei
 
-## Was aus Rezensionen eingeflossen ist
-| Kritik an anderen Apps | Lösung in FingerNote |
-|---|---|
-| Abo-Zwang, Login, Funktionen hinter Bezahlschranke | komplett kostenlos, kein Konto |
-| Datenverlust nach Updates | Autospeichern, Papierkorb, Backup-Erinnerung, Backup als Datei |
-| Werkzeuge in Untermenüs versteckt, Leiste ändert sich ständig | feste Werkzeugleiste, Optionen immer sichtbar darunter |
-| „Farbleiste oben“ gewünscht | sechs Lieblingsfarben direkt sichtbar, antippen zum Anpassen |
-| Handballen löst Zoomen/Scrollen aus | Pencil-Erkennung: Finger scrollt, Handballen wird ignoriert |
-| Stift verzögert / Tinte flackert | eigene Zeichen-Engine mit Zwischenspeicher pro Seite |
-| Markdown in Texten gewünscht | Markdown inklusive Checklisten |
-| Regenbogen-/Effektstift gewünscht | Regenbogen-Stift |
-| Lernband soll im Export ausblendbar sein | Schalter beim Export |
-| Textmarker überdeckt Schrift | Textmarker liegt immer darunter |
+## OneDrive einrichten (einmalig, kostenlos)
+Damit sich FingerNote mit OneDrive verbinden darf, braucht es eine eigene „App-Registrierung“ bei Microsoft:
+
+1. https://portal.azure.com öffnen und mit dem Microsoft-Konto anmelden
+   (ein normales Outlook-/Hotmail-Konto reicht).
+2. **App-Registrierungen → Neue Registrierung**
+   - Name: `FingerNote`
+   - Unterstützte Kontotypen: **„Konten in einem beliebigen Organisationsverzeichnis und persönliche Microsoft-Konten“**
+   - Umleitungs-URI: Plattform **„Single-Page-Anwendung (SPA)“**, Adresse
+     `https://maximal-ctrl.github.io/fingernote/`
+3. **Registrieren** → die **Anwendungs-ID (Client-ID)** kopieren.
+4. In FingerNote: **Einstellungen → OneDrive** → ID einfügen → **Speichern** → **Mit OneDrive verbinden**.
+   (Alternativ die ID in `js/config.js` eintragen, dann gilt sie für alle Geräte.)
+
+Die Sicherung landet in OneDrive unter **Apps/FingerNote** – eine Datei pro FingerNote-Konto.
+Microsoft lässt Anmeldungen von Web-Apps nach etwa 24 Stunden ablaufen; dann zeigt FingerNote
+„OneDrive neu verbinden“ – einmal tippen genügt.
 
 ## Datenschutz
-Dieses Repo enthält nur das Programm. **Alle Notizen werden ausschließlich auf dem Gerät gespeichert**
-(App-Speicher/IndexedDB) und nie an einen Server übertragen. Sichern: Einstellungen → „Backup sichern“ →
-im Teilen-Menü „In Dateien sichern“ (z. B. iCloud Drive).
+Alle Notizen liegen im App-Speicher des Geräts (pro Konto getrennt) und – wenn verbunden – in deiner
+eigenen OneDrive. Der Anmeldecode trennt Konten voneinander und schützt vor neugierigen Blicken;
+die Daten selbst sind nicht verschlüsselt.
 
 ## Aktualisieren
-Neue Programmversion in dieses Repo hochladen und in `sw.js` die `VERSION` erhöhen (siehe `CLAUDE.md`).
-Die App lädt die neue Version beim nächsten Start im Hintergrund und verwendet sie ab dem darauffolgenden Start.
+Neue Version hochladen und in `sw.js` die `VERSION` erhöhen (siehe `CLAUDE.md`).
 
 ## Technik
 Reines HTML/CSS/JavaScript ohne Build-Schritt. PDF-Import über [pdf.js](https://mozilla.github.io/pdf.js/)

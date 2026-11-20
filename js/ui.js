@@ -128,7 +128,7 @@ export function menu(anchor, items, opts = {}) {
       disabled: it.disabled,
       onclick: () => { closePopover(); it.run && it.run(); },
     });
-    b.innerHTML = `${it.icon ? icon(it.icon) : '<span class="ic"></span>'}<span class="menu-label"></span>${it.checked ? icon('check', 'menu-check') : ''}`;
+    b.innerHTML = `${it.color ? `<span class="menu-dot" style="background:${it.color}"></span>` : it.icon ? icon(it.icon) : '<span class="ic"></span>'}<span class="menu-label"></span>${it.checked ? icon('check', 'menu-check') : ''}`;
     b.querySelector('.menu-label').textContent = it.label;
     if (it.hint) b.append(el('span', { class: 'menu-hint' }, it.hint));
     list.append(b);

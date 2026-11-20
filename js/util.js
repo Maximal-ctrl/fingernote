@@ -1,6 +1,6 @@
 // Kleine Hilfsfunktionen, die überall gebraucht werden.
 
-export const APP_VERSION = '1.01';
+export const APP_VERSION = '2.0';
 
 export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -76,7 +76,7 @@ export function safeFileName(s) {
 }
 
 // ---------- Einstellungen (pro Gerät, localStorage) ----------
-const SKEY = 'fingernote.settings';
+let SKEY = 'fingernote.settings';
 const DEFAULTS = {
   theme: 'system',          // system | light | dark
   finger: 'auto',           // auto | draw | pan
@@ -87,8 +87,18 @@ const DEFAULTS = {
   lastBackup: 0,
   welcomed: false,
   tools: null,              // Werkzeugeinstellungen (Farben, Stärken)
+  scribbleErase: true,      // Wegkritzeln mit dem Stift radiert
+  eraserBack: false,        // Radierer springt nach dem Radieren zum Stift zurück
+  darkPages: false,         // Seiten im Dunkelmodus abdunkeln
+  smoothing: 0.5,           // Strichglättung 0..1
+  libView: 'world',         // world | grid
+  odAuto: true,             // OneDrive automatisch hochladen
+  odClientId: '',           // eigene App-ID (Azure), optional
+  presets: [],              // Lieblingsstifte
 };
 let settings = null;
+/** Jedes Konto hat eigene Einstellungen. */
+export function useSettingsKey(key) { SKEY = key; settings = null; }
 export function getSettings() {
   if (!settings) {
     try { settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SKEY) || '{}') }; }
@@ -108,8 +118,12 @@ export function applyTheme() {
   else document.documentElement.setAttribute('data-theme', t);
   const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   const meta = document.querySelector('meta[name=theme-color]');
-  if (meta) meta.setAttribute('content', dark ? '#1b1b1e' : '#f6f6f3');
+  if (meta) meta.setAttribute('content', dark ? '#111113' : '#f4f4f2');
+  return dark;
 }
+
+export const isDarkUI = () => document.documentElement.getAttribute('data-theme') === 'dark' ||
+  (!document.documentElement.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
 
 export function blobToDataURL(blob) {
   return new Promise((res, rej) => {

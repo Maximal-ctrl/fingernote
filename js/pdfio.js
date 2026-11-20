@@ -1,5 +1,5 @@
 // PDF-Import (über pdf.js, liegt in lib/) und PDF-Export (eigener, schlanker PDF-Schreiber).
-import { renderPageToCanvas, ensureImages } from './ink.js';
+import { renderPageToCanvas, ensureImages, pageRegion } from './ink.js';
 import { putBlob } from './store.js';
 import { canvasToBlob } from './util.js';
 
@@ -113,11 +113,12 @@ export async function exportPdf(title, pages, { hideTape = false } = {}, onProgr
       const p = pages[i];
       if (onProgress) onProgress(i / pages.length, `Seite ${i + 1} von ${pages.length}`);
       await ensureImages(p);
+      const R = pageRegion(p);
       let K = 1654 / 1000; // ~200 dpi bei A4
-      K = Math.min(K, Math.sqrt(14e6 / (p.w * p.h)));
-      renderPageToCanvas(canvas, p, K, { hideTape });
+      K = Math.min(K, Math.sqrt(14e6 / (R.w * R.h)));
+      renderPageToCanvas(canvas, p, K, { hideTape, region: R });
       const blob = await canvasToBlob(canvas, 'image/jpeg', 0.9);
-      imgs.push({ bytes: new Uint8Array(await blob.arrayBuffer()), pxW: canvas.width, pxH: canvas.height, ptW: p.w * 0.59528, ptH: p.h * 0.59528 });
+      imgs.push({ bytes: new Uint8Array(await blob.arrayBuffer()), pxW: canvas.width, pxH: canvas.height, ptW: R.w * 0.59528, ptH: R.h * 0.59528 });
     }
   } finally {
     canvas.width = canvas.height = 0;
@@ -129,8 +130,9 @@ export async function exportPdf(title, pages, { hideTape = false } = {}, onProgr
 export async function exportPageImage(page, { hideTape = false } = {}) {
   await ensureImages(page);
   const canvas = document.createElement('canvas');
-  const K = Math.min(2, Math.sqrt(14e6 / (page.w * page.h)));
-  renderPageToCanvas(canvas, page, K, { hideTape });
+  const R = pageRegion(page);
+  const K = Math.min(2, Math.sqrt(14e6 / (R.w * R.h)));
+  renderPageToCanvas(canvas, page, K, { hideTape, region: R });
   const blob = await canvasToBlob(canvas, 'image/png');
   canvas.width = canvas.height = 0;
   return blob;

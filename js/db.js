@@ -3,9 +3,34 @@
 //  pages : Seiten (Striche, Texte, Bilder)
 //  blobs : Bilder und PDF-Hintergründe (als ArrayBuffer – robust in Safari)
 
-const DB_NAME = 'fingernote';
+let DB_NAME = 'fingernote';
 const DB_VERSION = 1;
 let dbPromise = null;
+let quiet = 0;
+
+/** Jedes Konto hat seine eigene Datenbank. */
+export function useDatabase(name) {
+  if (name === DB_NAME && dbPromise) return;
+  if (dbPromise) dbPromise.then((db) => db.close()).catch(() => {});
+  dbPromise = null;
+  DB_NAME = name;
+}
+
+export function deleteDatabase(name) {
+  return new Promise((res) => {
+    const r = indexedDB.deleteDatabase(name);
+    r.onsuccess = r.onerror = r.onblocked = () => res();
+  });
+}
+
+/** Schreibzugriffe melden (für die automatische OneDrive-Sicherung). */
+let changeT = 0;
+function notifyChange() {
+  if (quiet) return;
+  clearTimeout(changeT);
+  changeT = setTimeout(() => window.dispatchEvent(new Event('fingernote:changed')), 300);
+}
+export async function silently(fn) { quiet++; try { return await fn(); } finally { quiet--; } }
 
 export function openDB() {
   if (!dbPromise) {
@@ -39,7 +64,7 @@ async function run(stores, mode, fn) {
   return new Promise((resolve, reject) => {
     const t = db.transaction(stores, mode);
     let result;
-    t.oncomplete = () => resolve(result);
+    t.oncomplete = () => { if (mode === 'readwrite') notifyChange(); resolve(result); };
     t.onerror = () => reject(t.error);
     t.onabort = () => reject(t.error || new Error('Transaktion abgebrochen'));
     Promise.resolve(fn(t)).then((r) => { result = r; }, (e) => { try { t.abort(); } catch (x) { /* */ } reject(e); });

@@ -4,14 +4,19 @@ import * as db from './db.js';
 import { uid, arrayBufferToBase64, base64ToArrayBuffer, APP_VERSION } from './util.js';
 import { FORMATS } from './ink.js';
 
-export const COVER_COLORS = ['#0d8f80', '#2563eb', '#7c3aed', '#db2777', '#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#475569', '#1f2937'];
+export const COVER_COLORS = ['#6a5cff', '#2f6bff', '#0ea5a4', '#22a35a', '#f59e0b', '#f97316', '#ef4f6c', '#d946ef', '#64748b', '#1f2430'];
 
-export function newPage(nbId, { template = 'lined', paper = 'white', format = 'portrait' } = {}) {
+export function newPage(nbId, { template = 'lined', paper = 'white', format = 'portrait', sec = null, infinite = false } = {}) {
   const f = FORMATS[format] || FORMATS.portrait;
   return {
-    id: uid(), nb: nbId, w: f.w, h: f.h, endless: !!f.endless,
+    id: uid(), nb: nbId, w: f.w, h: f.h, endless: !!f.endless && !infinite, infinite: !!infinite, sec,
     template, paper, bg: null, bm: false, strokes: [], texts: [], images: [],
   };
+}
+
+export const SECTION_COLORS = ['#6a5cff', '#0ea5a4', '#ef4f6c', '#f59e0b', '#22a35a', '#0ea5e9', '#8b5cf6', '#64748b'];
+export function newSection(index = 0, name) {
+  return { id: 's' + uid(), name: name || `Kapitel ${index + 1}`, color: SECTION_COLORS[index % SECTION_COLORS.length] };
 }
 
 export const listItems = () => db.getAll('items');
@@ -25,15 +30,16 @@ export async function createFolder(name, parent = null, color = '#0d8f80') {
   return f;
 }
 
-export async function createNotebook({ name, parent = null, color = COVER_COLORS[0], template = 'lined', paper = 'white', format = 'portrait', pages = null }) {
+export async function createNotebook({ name, parent = null, color = COVER_COLORS[0], template = 'lined', paper = 'white', format = 'portrait', pages = null, mode = 'pages' }) {
   const now = Date.now();
+  const sec = newSection(0);
   const nb = {
-    id: uid(), kind: 'notebook', name: name || 'Unbenannt', parent, color,
+    id: uid(), kind: 'notebook', name: name || 'Unbenannt', parent, color, mode,
     created: now, updated: now, deleted: null, fav: false,
-    defaults: { template, paper, format }, pages: [], thumb: null, idx: [],
+    defaults: { template, paper, format }, pages: [], thumb: null, idx: [], sections: [sec],
   };
-  const pageObjs = pages || [newPage(nb.id, { template, paper, format })];
-  for (const p of pageObjs) p.nb = nb.id;
+  const pageObjs = pages || [newPage(nb.id, { template, paper, format, infinite: mode === 'canvas' })];
+  for (const p of pageObjs) { p.nb = nb.id; p.sec = sec.id; }
   nb.pages = pageObjs.map((p) => p.id);
   await db.batch([{ store: 'items', put: nb }, ...pageObjs.map((p) => ({ store: 'pages', put: p }))]);
   return nb;
@@ -49,11 +55,22 @@ export async function loadNotebook(id) {
     const p = byId.get(pid);
     if (p) { normalizePage(p); pages.push(p); }
   }
-  if (!pages.length) {
-    const p = newPage(id, nb.defaults || {});
-    pages.push(p);
-    nb.pages = [p.id];
-    await db.batch([{ store: 'items', put: nb }, { store: 'pages', put: p }]);
+  // Kapitel (ab Version 2.0) – ältere Bücher bekommen automatisch „Kapitel 1“
+  if (!Array.isArray(nb.sections) || !nb.sections.length) nb.sections = [newSection(0)];
+  if (!nb.mode) nb.mode = 'pages';
+  const secIds = new Set(nb.sections.map((x) => x.id));
+  for (const p of pages) if (!secIds.has(p.sec)) p.sec = nb.sections[0].id;
+  // jedes Kapitel braucht mindestens eine Seite
+  const add = [];
+  for (const sec of nb.sections) {
+    if (!pages.some((p) => p.sec === sec.id)) {
+      const p = newPage(id, { ...(nb.defaults || {}), sec: sec.id, infinite: nb.mode === 'canvas' });
+      pages.push(p); add.push(p);
+    }
+  }
+  if (add.length) {
+    nb.pages = pages.map((p) => p.id);
+    await db.batch([{ store: 'items', put: nb }, ...add.map((p) => ({ store: 'pages', put: p }))]);
   }
   return { nb, pages };
 }
@@ -292,7 +309,7 @@ export async function requestPersist() {
 
 // ---------------------------------------------------------------- Willkommens-Notizbuch
 export async function createWelcome() {
-  const nb = await createNotebook({ name: 'Erste Schritte', color: '#0d8f80', template: 'dots', paper: 'white' });
+  const nb = await createNotebook({ name: 'Erste Schritte', color: '#6a5cff', template: 'dots', paper: 'white' });
   const { pages } = await loadNotebook(nb.id);
   const p = pages[0];
   p.texts = [
@@ -306,11 +323,11 @@ export async function createWelcome() {
     },
     {
       id: uid(), x: 80, y: 720, w: 840, size: 20, c: null,
-      text: '## Probier es aus\n- [ ] Mit dem ==Textmarker== diese Zeile markieren\n- [ ] Mit dem Lasso etwas einkreisen und verschieben\n- [ ] Lernband über ein Wort kleben und antippen\n- [x] FingerNote zum Home-Bildschirm hinzufügen',
+      text: '## Probier es aus\n- [ ] Mit dem ==Textmarker== diese Zeile markieren\n- [ ] Etwas schreiben und mit dem Stift im Zickzack **wegkritzeln**\n- [ ] Mit dem Lasso etwas einkreisen und verschieben\n- [ ] Oben auf „Kapitel 1“ tippen und ein neues Kapitel anlegen\n- [x] FingerNote zum Home-Bildschirm hinzufügen',
     },
     {
       id: uid(), x: 80, y: 1040, w: 840, size: 18, c: '#6b6b70',
-      text: '**Tipp:** Unter *Einstellungen → Backup sichern* kannst du alle Notizen als Datei in iCloud Drive oder „Dateien“ ablegen. Texte unterstützen Markdown: **fett**, *kursiv*, ~~durchgestrichen~~, ==markiert==, Listen und Checklisten.',
+      text: '**Tipp:** Unter *Einstellungen → OneDrive* sicherst du alles automatisch – oder als Datei in iCloud Drive. Texte unterstützen Markdown: **fett**, *kursiv*, ~~durchgestrichen~~, ==markiert==, Listen und Checklisten.',
     },
   ];
   nb.idx = buildIndex([p]);

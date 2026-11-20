@@ -7,12 +7,12 @@
  * neuere Programmdateien nach; sie sind beim nächsten Start aktiv.
  * Bei jeder Veröffentlichung VERSION erhöhen.
  */
-const VERSION = 'fingernote-v1.01';
+const VERSION = 'fingernote-v2.0';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/util.js', 'js/db.js', 'js/store.js', 'js/ink.js', 'js/shapes.js', 'js/tools.js',
   'js/ruler.js', 'js/editor.js', 'js/editor-ui.js', 'js/library.js', 'js/ui.js', 'js/icons.js',
-  'js/pickers.js', 'js/pdfio.js',
+  'js/pickers.js', 'js/pdfio.js', 'js/accounts.js', 'js/config.js', 'js/onedrive.js', 'js/world.js',
   'lib/pdf.min.js', 'lib/pdf.worker.min.js',
   'apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
 ];

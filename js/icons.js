@@ -61,9 +61,41 @@ const P = {
   minus: '<path d="M5 12h14"/>',
   zoomIn: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/>',
   wand: '<path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8l1.4 1.4M15 9h0M17.8 6.2l1.4-1.4M3 21l9-9M12.2 6.2l-1.4-1.4"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/>',
+  network: '<circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M10.2 10.2L6.4 6.4M13.8 10.2l3.8-3.8M10.2 13.8l-3.8 3.8M13.8 13.8l3.8 3.8"/>',
+  book: '<path d="M4 5.5A2.5 2.5 0 016.5 3H20v15H6.5A2.5 2.5 0 004 20.5z"/><path d="M4 20.5A2.5 2.5 0 016.5 18H20v3H6.5A2.5 2.5 0 014 20.5z"/>',
+  canvas: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 15c2-4 4 1 6-2s3-4 4-3" /><path d="M3 9h2M19 15h2M9 3v2M15 19v2" opacity=".5"/>',
+  pages: '<rect x="7" y="3" width="13" height="16" rx="2"/><path d="M4 7v12a2 2 0 002 2h10"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/>',
+  unlock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 017.5-2"/>',
+  layerFront: '<rect x="8" y="8" width="12" height="12" rx="2" fill="currentColor" fill-opacity=".25"/><path d="M4 16V6a2 2 0 012-2h10"/>',
+  layerBack: '<rect x="4" y="4" width="12" height="12" rx="2" fill="currentColor" fill-opacity=".25"/><path d="M20 8v10a2 2 0 01-2 2H8"/>',
+  dropper: '<path d="M19.5 4.5a2.1 2.1 0 00-3 0L13 8l-1-1-2 2 1 1-6.5 6.5V20h3.5L14.5 13.5l1 1 2-2-1-1 3-3a2.1 2.1 0 000-3z"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0116 0"/>',
+  logout: '<path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3"/><path d="M10 17l-5-5 5-5M5 12h11"/>',
+  cloud: '<path d="M7 18a5 5 0 01-.5-9.97A6 6 0 0118 9a4.5 4.5 0 01-.5 9z"/>',
+  cloudUp: '<path d="M7 18a5 5 0 01-.5-9.97A6 6 0 0118 9a4.5 4.5 0 01-.5 9"/><path d="M12 12v8M9 15l3-3 3 3"/>',
+  cloudDown: '<path d="M7 18a5 5 0 01-.5-9.97A6 6 0 0118 9a4.5 4.5 0 01-.5 9"/><path d="M12 12v8M9 17l3 3 3-3"/>',
+  chapter: '<path d="M6 3h11a2 2 0 012 2v16l-4-3-4 3V5" /><path d="M6 3a2 2 0 00-2 2v14" />',
+  star2: '<path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z" fill="currentColor"/>',
+  scribble: '<path d="M3 15c3-6 4 4 7-2s4 4 7-2 3 2 4 1"/>',
   rotate: '<path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
 };
 
 export function icon(name, cls = '') {
   return `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 }
+
+// Logo: handgeschriebenes „f.“ mit Farbverlauf auf dunklem Grund
+let logoN = 0;
+export function logoSvg(size = 40) {
+  const n = ++logoN;
+  return `<svg class="logo" width="${size}" height="${size}" viewBox="0 0 512 512" aria-hidden="true">
+<defs><linearGradient id="lb${n}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#26263a"/><stop offset="1" stop-color="#0d0d14"/></linearGradient>
+<linearGradient id="ls${n}" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#5b8cff"/><stop offset=".55" stop-color="#8b5cf6"/><stop offset="1" stop-color="#ff6fb1"/></linearGradient></defs>
+<rect width="512" height="512" rx="116" fill="url(#lb${n})"/>
+<path d="M138 368C190 368 226 332 250 272C278 202 296 136 340 136C378 136 380 194 334 212C294 228 246 226 222 226L336 226" fill="none" stroke="url(#ls${n})" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="374" cy="362" r="20" fill="#fff"/></svg>`;
+}
+
+export const ICON_NAMES = Object.keys(P);

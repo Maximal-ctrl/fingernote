@@ -15,11 +15,12 @@ export function templatePreview(template, paper, w = 66, h = 92) {
   return c;
 }
 
-export function templatePicker(value, paper, onChange) {
+export function templatePicker(value, paper, onChange, only = null) {
   const wrap = el('div', { class: 'tpl-grid' });
   const render = () => {
     wrap.innerHTML = '';
     for (const [k, label] of Object.entries(TEMPLATES)) {
+      if (only && !only.includes(k)) continue;
       const b = el('button', { class: `tpl ${k === value ? 'on' : ''}`, type: 'button' }, templatePreview(k, paper), el('span', null, label));
       b.addEventListener('click', () => { value = k; onChange(k); render(); });
       wrap.append(b);

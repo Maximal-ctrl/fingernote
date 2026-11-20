@@ -103,6 +103,7 @@ class InkAction {
     }
     if (this.straight) this.stroke.sh = true;
     if (!this.stroke.pts.length) return;
+    if (this.tool === 'pen' && !this.shaped && !this.straight && getSettings().scribbleErase && ed.scribbleErase(this.page, this.stroke)) return;
     ed.addStroke(this.page, this.stroke);
   }
 
@@ -147,6 +148,7 @@ function splitStroke(s, x, y, r) {
 class EraseAction {
   constructor(ed, pt) {
     this.ed = ed;
+    this.erases = true;
     const hit = ed.hitPage(pt.sx, pt.sy, 40);
     if (!hit) { this.dead = true; return; }
     this.L = hit.L;
@@ -236,20 +238,37 @@ class LassoAction {
   end(pt) {
     if (this.dead) return;
     const ed = this.ed, page = this.page;
+    const f = ed.toolState.lasso || { strokes: true, texts: true, images: true };
     const ids = new Set();
     if (this.travel < 8) {
       // Antippen: einzelnes Element auswählen
       const { x, y } = ed.toPage(this.L, pt.sx, pt.sy);
       const tol = 10 / ed.view.s;
-      for (let i = page.images.length - 1; i >= 0 && !ids.size; i--) {
-        const im = page.images[i];
-        if (x >= im.x && x <= im.x + im.w && y >= im.y && y <= im.y + im.h) ids.add(im.id);
+      let locked = null;
+      // Reihenfolge wie auf der Seite: Bilder vorne → Text → Schrift → Bilder hinten
+      const imgHit = (front) => {
+        for (let i = page.images.length - 1; i >= 0 && !ids.size; i--) {
+          const im = page.images[i];
+          if ((im.layer === 'front') !== front) continue;
+          if (x >= im.x && x <= im.x + im.w && y >= im.y && y <= im.y + im.h) {
+            if (im.lock) { locked = locked || { kind: 'images', item: im }; if (front) return; continue; }
+            if (f.images) ids.add(im.id);
+          }
+        }
+      };
+      imgHit(true);
+      if (!ids.size && !locked) {
+        const t = textAt(page, x, y);
+        if (t && t.lock) locked = { kind: 'texts', item: t };
+        else if (t && f.texts) ids.add(t.id);
       }
-      if (!ids.size) { const t = textAt(page, x, y); if (t) ids.add(t.id); }
-      if (!ids.size) for (let i = page.strokes.length - 1; i >= 0; i--) if (strokeHit(page.strokes[i], x, y, tol)) { ids.add(page.strokes[i].id); break; }
+      if (!ids.size && !locked && f.strokes) for (let i = page.strokes.length - 1; i >= 0; i--) if (strokeHit(page.strokes[i], x, y, tol)) { ids.add(page.strokes[i].id); break; }
+      if (!ids.size && !locked) imgHit(false);
+      if (!ids.size && locked) { ed.ui.lockedMenu(this.L, locked, pt); return; }
     } else {
       const poly = this.poly;
       for (const s of page.strokes) {
+        if (!f.strokes) break;
         const b = geom(s).bbox;
         if (!pointInPoly((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, poly)) {
           // mehrheitlich innen?
@@ -260,10 +279,11 @@ class LassoAction {
         ids.add(s.id);
       }
       for (const t of page.texts) {
+        if (!f.texts || t.lock) continue;
         const h = textHeight(t);
         if (pointInPoly(t.x + t.w / 2, t.y + h / 2, poly) || pointInPoly(t.x + 10, t.y + 10, poly)) ids.add(t.id);
       }
-      for (const im of page.images) if (pointInPoly(im.x + im.w / 2, im.y + im.h / 2, poly)) ids.add(im.id);
+      for (const im of page.images) if (f.images && !im.lock && pointInPoly(im.x + im.w / 2, im.y + im.h / 2, poly)) ids.add(im.id);
     }
     if (ids.size) ed.setSelection(this.L, ids);
     else ed.requestLive();
@@ -339,10 +359,12 @@ class SelectionAction {
     const ed = this.ed, page = this.L.page, ids = this.sel.ids;
     ed.pageTransform(ctx, this.L, true);
     this.transformCtx(ctx);
-    for (const im of page.images) if (ids.has(im.id)) { const img = getImage(im.blob); if (img) ctx.drawImage(img, im.x, im.y, im.w, im.h); }
+    const imgs = (front) => { for (const im of page.images) if (ids.has(im.id) && (im.layer === 'front') === front) { const img = getImage(im.blob); if (img) ctx.drawImage(img, im.x, im.y, im.w, im.h); } };
+    imgs(false);
     for (const s of page.strokes) if (ids.has(s.id) && s.t === 'marker') drawStroke(ctx, s);
     for (const t of page.texts) if (ids.has(t.id)) drawText(ctx, t, page.paper === 'dark');
     for (const s of page.strokes) if (ids.has(s.id) && s.t !== 'marker') drawStroke(ctx, s);
+    imgs(true);
   }
 }
 

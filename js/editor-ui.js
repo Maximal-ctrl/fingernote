@@ -1,9 +1,9 @@
-// Oberfläche des Editors: Werkzeugleiste, Optionsleiste, Seitenleiste, Menüs.
-import { el, clamp, debounce, getSettings, safeFileName, pickFile, fmtBytes, shareOrDownload } from './util.js';
+// Oberfläche des Editors: schwebende Leisten, Optionen, Kapitel, Seitenleiste, Menüs.
+import { el, clamp, debounce, getSettings, saveSettings, safeFileName, pickFile, fmtBytes, shareOrDownload } from './util.js';
 import { icon } from './icons.js';
-import { toast, dialog, menu, popover, closePopover, prompt, progress, segmented, toggle } from './ui.js';
-import { renderPageToCanvas } from './ink.js';
-import { templatePicker, paperPicker, PALETTE, field } from './pickers.js';
+import { toast, dialog, menu, popover, closePopover, prompt, progress, segmented, toggle, confirm } from './ui.js';
+import { renderPageToCanvas, pageRegion } from './ink.js';
+import { templatePicker, paperPicker, PALETTE, field, colorRow } from './pickers.js';
 import * as store from './store.js';
 import { exportPdf, exportPageImage, importPdfPages } from './pdfio.js';
 
@@ -36,12 +36,14 @@ export function showHelp() {
   const rows = [
     ['Zwei Finger tippen', 'Rückgängig'],
     ['Drei Finger tippen', 'Wiederholen'],
-    ['Zwei Finger ziehen', 'Seite bewegen'],
-    ['Zwei Finger spreizen', 'Zoomen (rastet bei Seitenbreite ein)'],
+    ['Zwei Finger ziehen / spreizen', 'Bewegen und zoomen (rastet bei Seitenbreite ein)'],
     ['Zeichnen und kurz halten', 'Saubere Form: Linie, Kreis, Rechteck, Dreieck …'],
+    ['Mit dem Stift wegkritzeln', 'Löscht die Schrift darunter'],
     ['Textmarker halten', 'Gerade Markierung'],
     ['Lernband antippen', 'Aufdecken / wieder abdecken'],
     ['Checkbox antippen', 'Abhaken'],
+    ['Gesperrtes Bild mit dem Lasso antippen', 'Entsperren'],
+    ['Farbe erneut antippen → Pipette', 'Farbe von der Seite aufnehmen'],
     ['Lineal: 1 Finger / 2 Finger', 'Verschieben / Drehen (rastet bei 45° ein)'],
     ['Hand-Symbol oben rechts', 'Finger zeichnet ↔ Finger scrollt'],
   ];
@@ -50,7 +52,7 @@ export function showHelp() {
     ['P H E L S T B Z', 'Stift, Textmarker, Radierer, Lasso, Formen, Text, Lernband, Laser'],
     ['R', 'Lineal ein/aus'],
     ['⌘C ⌘X ⌘V ⌘D', 'Kopieren, Ausschneiden, Einfügen, Duplizieren'],
-    ['+ / − / 0', 'Zoomen / Seitenbreite'],
+    ['+ / − / 0', 'Zoomen / Einpassen'],
   ];
   const table = (list) => el('div', { class: 'help-list' }, list.map(([a, b]) => el('div', { class: 'help-row' }, el('span', { class: 'help-k' }, a), el('span', null, b))));
   dialog({
@@ -80,50 +82,61 @@ export class EditorUI {
   build() {
     const r = this.root;
     r.innerHTML = `
-      <header class="ed-bar">
-        <div class="ed-left">
-          <button class="ib" data-a="back" title="Zur Bibliothek" aria-label="Zur Bibliothek">${icon('back')}</button>
-          <button class="ib" data-a="pages" title="Seitenübersicht" aria-label="Seitenübersicht">${icon('sidebar')}</button>
-          <button class="ed-title" data-a="rename" title="Umbenennen"><span class="t"></span><span class="save-state"></span></button>
-        </div>
-        <div class="ed-tools" role="toolbar" aria-label="Werkzeuge">
-          ${TOOLS.map(([k, ic, label]) => `<button class="tb" data-tool="${k}" title="${label}" aria-label="${label}">${icon(ic)}<span class="tdot"></span></button>`).join('')}
-          <span class="tb-sep"></span>
-          <button class="tb" data-a="image" title="Bild einfügen" aria-label="Bild einfügen">${icon('image')}</button>
-          <button class="tb" data-a="ruler" title="Lineal (R)" aria-label="Lineal">${icon('ruler')}</button>
-        </div>
-        <div class="ed-right">
-          <button class="ib" data-a="finger"></button>
-          <button class="ib" data-a="undo" title="Rückgängig (2 Finger tippen)" aria-label="Rückgängig">${icon('undo')}</button>
-          <button class="ib" data-a="redo" title="Wiederholen (3 Finger tippen)" aria-label="Wiederholen">${icon('redo')}</button>
-          <button class="ib" data-a="addpage" title="Neue Seite danach" aria-label="Neue Seite">${icon('plus')}</button>
-          <button class="ib" data-a="more" title="Mehr" aria-label="Mehr">${icon('more')}</button>
-        </div>
-      </header>
-      <div class="ed-ctx"><div class="ctx-inner"></div></div>
       <div class="ed-body">
         <div class="ed-stage">
           <canvas class="base"></canvas>
           <div class="ruler" hidden><span class="ruler-angle">0°</span></div>
           <canvas class="live"></canvas>
           <textarea class="text-edit" hidden spellcheck="true" autocapitalize="sentences" aria-label="Text"></textarea>
-          <div class="sel-menu" hidden></div>
+          <div class="sel-menu glass" hidden></div>
           <div class="flash" hidden></div>
-          <button class="pg-ind" title="Seitenübersicht"></button>
-          <button class="zoom-ind" hidden title="Auf Seitenbreite"></button>
-          <button class="focus-exit ib" hidden title="Vollbild beenden" aria-label="Vollbild beenden">${icon('focus')}</button>
+          <button class="pg-ind glass" title="Seitenübersicht"></button>
+          <button class="zoom-ind glass" hidden title="Einpassen"></button>
+          <button class="focus-exit glass ib" hidden title="Vollbild beenden" aria-label="Vollbild beenden">${icon('focus')}</button>
         </div>
-        <aside class="ed-side" hidden>
+        <aside class="ed-side glass" hidden>
           <div class="side-head">
+            <span class="side-title">Kapitel</span>
+            <button class="ib sm" data-a="addsec" title="Neues Kapitel" aria-label="Neues Kapitel">${icon('plus')}</button>
+            <button class="ib sm" data-a="closeside" aria-label="Schließen">${icon('x')}</button>
+          </div>
+          <div class="side-secs"></div>
+          <div class="side-pages-head">
             <span class="side-title">Seiten</span>
             <button class="chip" data-a="bmonly">${icon('bookmark')}<span>Lesezeichen</span></button>
-            <button class="ib sm" data-a="closeside" aria-label="Schließen">${icon('x')}</button>
           </div>
           <div class="side-list"></div>
           <button class="side-add" data-a="addend">${icon('plus')}<span>Seite am Ende</span></button>
         </aside>
+      </div>
+      <div class="ed-top">
+        <div class="ed-bars">
+          <div class="float-bar glass ed-left">
+            <button class="ib" data-a="back" title="Zur Bibliothek" aria-label="Zur Bibliothek">${icon('back')}</button>
+            <button class="ib" data-a="pages" title="Kapitel & Seiten" aria-label="Kapitel und Seiten">${icon('sidebar')}</button>
+            <div class="ed-titles">
+              <button class="ed-title" data-a="rename" title="Umbenennen"><span class="t"></span><span class="save-state"></span></button>
+              <button class="chapter-chip" data-a="chapters" title="Kapitel wechseln"><span class="dot"></span><span class="cn"></span>${icon('chevronDown')}</button>
+            </div>
+          </div>
+          <div class="float-bar glass ed-tools" role="toolbar" aria-label="Werkzeuge">
+            ${TOOLS.map(([k, ic, label]) => `<button class="tb" data-tool="${k}" title="${label}" aria-label="${label}">${icon(ic)}<span class="tdot"></span></button>`).join('')}
+            <span class="tb-sep"></span>
+            <button class="tb" data-a="image" title="Bild einfügen" aria-label="Bild einfügen">${icon('image')}</button>
+            <button class="tb" data-a="ruler" title="Lineal (R)" aria-label="Lineal">${icon('ruler')}</button>
+          </div>
+          <div class="float-bar glass ed-right">
+            <button class="ib" data-a="finger"></button>
+            <button class="ib" data-a="undo" title="Rückgängig (2 Finger tippen)" aria-label="Rückgängig">${icon('undo')}</button>
+            <button class="ib" data-a="redo" title="Wiederholen (3 Finger tippen)" aria-label="Wiederholen">${icon('redo')}</button>
+            <button class="ib" data-a="addpage" title="Neue Seite danach" aria-label="Neue Seite">${icon('plus')}</button>
+            <button class="ib" data-a="more" title="Mehr" aria-label="Mehr">${icon('more')}</button>
+          </div>
+        </div>
+        <div class="ed-ctx"><div class="float-bar glass ctx-inner"></div></div>
       </div>`;
     this.ctxInner = r.querySelector('.ctx-inner');
+    this.ctxBar = r.querySelector('.ed-ctx');
     this.title = r.querySelector('.ed-title .t');
     this.saveEl = r.querySelector('.save-state');
     this.selMenu = r.querySelector('.sel-menu');
@@ -132,6 +145,8 @@ export class EditorUI {
     this.flashEl = r.querySelector('.flash');
     this.side = r.querySelector('.ed-side');
     this.sideList = r.querySelector('.side-list');
+    this.sideSecs = r.querySelector('.side-secs');
+    this.chapChip = r.querySelector('.chapter-chip');
 
     r.addEventListener('click', (e) => {
       const b = e.target.closest('[data-a],[data-tool]');
@@ -140,7 +155,7 @@ export class EditorUI {
       this.action(b.dataset.a, b);
     });
     // Formatierungsknöpfe sollen das Textfeld nicht schließen
-    r.querySelector('.ed-ctx').addEventListener('pointerdown', (e) => {
+    this.ctxBar.addEventListener('pointerdown', (e) => {
       if (this.ed.editing && e.target.closest('button')) e.preventDefault();
     });
     this.selMenu.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -149,7 +164,15 @@ export class EditorUI {
     r.querySelector('.focus-exit').addEventListener('click', () => this.setFocus(false));
     this.thumbObserver = new IntersectionObserver((entries) => {
       for (const en of entries) if (en.isIntersecting) this.renderThumb(en.target.dataset.id);
-    }, { root: this.sideList, rootMargin: '200px' });
+    }, { root: this.side, rootMargin: '200px' });
+  }
+
+  /** Abstand von oben, damit Seiten unter den schwebenden Leisten beginnen. */
+  topInset() {
+    if (this.root.classList.contains('focus')) return 18;
+    const st = this.ed.stage.getBoundingClientRect();
+    const b = this.ctxBar.getBoundingClientRect();
+    return Math.max(18, Math.round(b.bottom - st.top + 12));
   }
 
   async action(a, btn) {
@@ -160,8 +183,10 @@ export class EditorUI {
       case 'closeside': this.toggleSidebar(false); break;
       case 'bmonly': this.bmOnly = !this.bmOnly; btn.classList.toggle('on', this.bmOnly); this.refreshSidebar(); break;
       case 'addend': ed.addPage(ed.pages.length - 1); break;
+      case 'addsec': this.newChapter(); break;
+      case 'chapters': this.chapterMenu(btn); break;
       case 'rename': {
-        const v = await prompt('Notizbuch umbenennen', ed.nb.name, { okLabel: 'Umbenennen' });
+        const v = await prompt('Buch umbenennen', ed.nb.name, { okLabel: 'Umbenennen' });
         if (v) { ed.nb.name = v; ed.nbDirty = true; ed.scheduleSave(); this.title.textContent = v; }
         break;
       }
@@ -170,7 +195,9 @@ export class EditorUI {
       case 'finger': ed.toggleFinger(); break;
       case 'undo': ed.undo(); break;
       case 'redo': ed.redo(); break;
-      case 'addpage': ed.addPage(); toast(`Seite ${ed.currentIndex() + 1} hinzugefügt`); break;
+      case 'addpage':
+        if (ed.infinite) { this.newChapter(); break; }
+        ed.addPage(); toast(`Seite ${ed.currentIndex() + 1} hinzugefügt`); break;
       case 'more': this.moreMenu(btn); break;
       default: break;
     }
@@ -180,6 +207,9 @@ export class EditorUI {
     this.title.textContent = this.ed.nb.name;
     this.setFocus(false, true);
     this.thumbs.clear();
+    this.root.classList.toggle('canvas-mode', this.ed.canvasMode);
+    const add = this.root.querySelector('[data-a="addpage"]');
+    add.title = this.ed.canvasMode ? 'Neue Leinwand (Kapitel)' : 'Neue Seite danach';
     this.refreshTool();
     this.updateUndo();
     this.updateFinger();
@@ -196,6 +226,57 @@ export class EditorUI {
     this.sideList.innerHTML = '';
   }
 
+  // ------------------------------------------------------------ Kapitel
+  refreshChapter() {
+    const ed = this.ed;
+    if (!ed.nb) return;
+    const sec = ed.section();
+    this.chapChip.querySelector('.dot').style.background = sec.color;
+    this.chapChip.querySelector('.cn').textContent = sec.name;
+    this.chapChip.title = `${ed.nb.sections.length} Kapitel – tippen zum Wechseln`;
+    this.updatePageIndicator(true);
+  }
+
+  chapterMenu(anchor) {
+    const ed = this.ed;
+    const items = [{ title: 'Kapitel' }];
+    for (const sec of ed.nb.sections) {
+      items.push({ label: sec.name, icon: 'chapter', checked: sec.id === ed.sec, color: sec.color, run: () => ed.switchSection(sec.id) });
+    }
+    items.push({ sep: true },
+      { label: 'Neues Kapitel', icon: 'plus', run: () => this.newChapter() },
+      { label: 'Kapitel umbenennen …', icon: 'pencil', run: () => this.editChapter(ed.section()) },
+      { label: 'Kapitel löschen', icon: 'trash', danger: true, disabled: ed.nb.sections.length < 2, run: () => this.deleteChapter(ed.section()) });
+    menu(anchor, items);
+  }
+
+  async newChapter() {
+    const ed = this.ed;
+    const name = await prompt(ed.canvasMode ? 'Neue Leinwand' : 'Neues Kapitel', `Kapitel ${ed.nb.sections.length + 1}`, { okLabel: 'Erstellen' });
+    if (name == null) return;
+    ed.addSection(name || undefined);
+    toast(`„${ed.section().name}“ erstellt`);
+  }
+
+  async editChapter(sec) {
+    const ed = this.ed;
+    let color = sec.color;
+    const inp = el('input', { class: 'inp', type: 'text', value: sec.name, autocomplete: 'off' });
+    const r = await dialog({
+      title: 'Kapitel bearbeiten',
+      body: el('div', null, field('Name', inp), field('Farbe', colorRow(store.SECTION_COLORS, color, (v) => { color = v; }))),
+      buttons: [{ label: 'Abbrechen', value: null }, { label: 'Speichern', value: true, primary: true }],
+      onOpen: () => setTimeout(() => inp.select(), 60),
+    });
+    if (r) ed.renameSection(sec.id, inp.value.trim(), color);
+  }
+
+  async deleteChapter(sec) {
+    const n = this.ed.secPages(sec.id).length;
+    if (!(await confirm('Kapitel löschen?', `„${sec.name}“ mit ${n} Seite${n === 1 ? '' : 'n'} wird gelöscht. Das lässt sich nicht rückgängig machen.`, 'Löschen', true))) return;
+    if (this.ed.deleteSection(sec.id)) toast('Kapitel gelöscht');
+  }
+
   // ------------------------------------------------------------ Werkzeuge
   refreshTool() {
     const ed = this.ed;
@@ -203,6 +284,7 @@ export class EditorUI {
     this.updateToolDots();
     this.buildCtx();
     this.selectionChanged();
+    if (ed.isOpen && !ed.infinite) requestAnimationFrame(() => { ed.clampView(); ed.requestRender(); });
   }
 
   updateToolDots() {
@@ -221,13 +303,23 @@ export class EditorUI {
     const hint = (t) => el('span', { class: 'ctx-hint' }, t);
     const save = () => { ed.saveToolState(); this.updateToolDots(); };
     switch (ed.tool) {
-      case 'pen':
+      case 'pen': {
+        const presets = getSettings().presets || [];
+        if (presets.length) {
+          box.append(el('div', { class: 'presets' }, presets.map((pr) => {
+            const b = el('button', { class: 'preset', title: 'Lieblingsstift', style: { '--c': pr.type === 'rainbow' ? '#999' : pr.c } }, el('span', { class: 'preset-dot', style: { width: Math.min(16, 4 + pr.w * 2) + 'px', height: Math.min(16, 4 + pr.w * 2) + 'px' } }));
+            b.addEventListener('click', () => ed.applyPreset(pr));
+            return b;
+          })), sep());
+        }
         box.append(
           segmented([['pen', 'Füller'], ['ball', 'Fineliner'], ['rainbow', 'Regenbogen']], ts.pen.type, (v) => { ts.pen.type = v; save(); }),
-          sep(), this.widthButtons('pen'), sep(), this.colorButtons('pen'));
+          sep(), this.widthButtons('pen'), sep(), this.colorButtons('pen'), sep(),
+          this.iconButton('star', 'Als Lieblingsstift speichern', (b) => this.presetMenu(b)));
         break;
+      }
       case 'shape':
-        box.append(hint('Form zeichnen – sie wird automatisch geglättet'), sep(), this.widthButtons('pen'), sep(), this.colorButtons('pen'));
+        box.append(hint('Form zeichnen – wird automatisch geglättet'), sep(), this.widthButtons('pen'), sep(), this.colorButtons('pen'));
         break;
       case 'marker':
         box.append(this.widthButtons('marker'), sep(), this.colorButtons('marker'), sep(),
@@ -237,12 +329,18 @@ export class EditorUI {
         box.append(
           segmented([['stroke', 'Ganze Striche'], ['pixel', 'Teilweise']], ts.eraser.mode, (v) => { ts.eraser.mode = v; save(); }),
           sep(), this.widthButtons('eraser'), sep(),
-          this.chip('Nur Textmarker', ts.eraser.markerOnly, (v) => { ts.eraser.markerOnly = v; save(); }));
+          this.chip('Nur Textmarker', ts.eraser.markerOnly, (v) => { ts.eraser.markerOnly = v; save(); }),
+          this.chip('Danach zurück zum Stift', !!getSettings().eraserBack, (v) => saveSettings({ eraserBack: v })));
         break;
-      case 'lasso':
-        box.append(hint('Einkreisen zum Auswählen · Antippen wählt ein einzelnes Element'));
-        if (ed.clipboard) box.append(sep(), this.ctxButton('paste', 'Einfügen', () => ed.paste()));
+      case 'lasso': {
+        const f = ts.lasso;
+        box.append(hint('Auswählen:'),
+          this.chip('Schrift', f.strokes, (v) => { f.strokes = v; save(); }),
+          this.chip('Text', f.texts, (v) => { f.texts = v; save(); }),
+          this.chip('Bilder', f.images, (v) => { f.images = v; save(); }));
+        if (ed.clipboard) box.append(sep(), this.ctxButton('Einfügen', () => ed.paste()));
         break;
+      }
       case 'text':
         if (ed.editing) this.buildTextBar(box);
         else {
@@ -253,8 +351,8 @@ export class EditorUI {
         break;
       case 'tape':
         box.append(this.widthButtons('tape'), sep(), this.colorButtons('tape'), sep(),
-          this.ctxButton('eye', 'Alle aufdecken', () => { const n = ed.setAllTapes(ed.currentLayout().page, true); if (!n) toast('Kein Lernband auf dieser Seite'); }),
-          this.ctxButton('eyeoff', 'Alle abdecken', () => { const n = ed.setAllTapes(ed.currentLayout().page, false); if (!n) toast('Kein aufgedecktes Lernband'); }));
+          this.ctxButton('Alle aufdecken', () => { const n = ed.setAllTapes(ed.currentLayout().page, true); if (!n) toast('Kein Lernband auf dieser Seite'); }),
+          this.ctxButton('Alle abdecken', () => { const n = ed.setAllTapes(ed.currentLayout().page, false); if (!n) toast('Kein aufgedecktes Lernband'); }));
         break;
       case 'laser':
         box.append(hint('Zum Präsentieren – die Spur verblasst von selbst'));
@@ -288,14 +386,28 @@ export class EditorUI {
     return b;
   }
 
-  ctxButton(ic, label, run) {
-    return el('button', { class: 'ctx-btn', onclick: run }, label);
+  iconButton(ic, label, run) {
+    const b = el('button', { class: 'tb sm', title: label, 'aria-label': label });
+    b.innerHTML = icon(ic);
+    b.addEventListener('click', () => run(b));
+    return b;
   }
+
+  ctxButton(label, run) { return el('button', { class: 'ctx-btn', onclick: run }, label); }
 
   chip(label, on, onChange) {
     const b = el('button', { class: `chip ${on ? 'on' : ''}` }, label);
     b.addEventListener('click', () => { on = !on; b.classList.toggle('on', on); onChange(on); });
     return b;
+  }
+
+  presetMenu(anchor) {
+    const presets = getSettings().presets || [];
+    menu(anchor, [
+      { title: 'Lieblingsstifte' },
+      { label: 'Aktuellen Stift speichern', icon: 'star', run: () => { this.ed.savePreset(); this.buildCtx(); } },
+      presets.length ? { label: 'Alle Lieblingsstifte entfernen', icon: 'trash', danger: true, run: () => { saveSettings({ presets: [] }); this.buildCtx(); } } : null,
+    ]);
   }
 
   widthButtons(tool) {
@@ -366,7 +478,14 @@ export class EditorUI {
     }
     const custom = el('input', { type: 'color', value: t.colors[i] });
     custom.addEventListener('input', () => pick(custom.value));
-    popover(anchor, el('div', { class: 'pal-pop' }, el('div', { class: 'pal-title' }, 'Farbe für dieses Feld'), grid, el('label', { class: 'pal-custom' }, el('span', null, 'Eigene Farbe'), custom)), { onClose: () => this.buildCtx() });
+    const dropper = el('button', { class: 'ctx-btn pal-drop', html: `${icon('dropper')}<span>Pipette</span>` });
+    dropper.addEventListener('click', () => {
+      closePopover();
+      this.ed.startDropper((c) => { pick(c); this.buildCtx(); toast('Farbe übernommen'); });
+    });
+    popover(anchor, el('div', { class: 'pal-pop' },
+      el('div', { class: 'pal-title' }, 'Farbe für dieses Feld'), grid,
+      el('div', { class: 'pal-row' }, dropper, el('label', { class: 'pal-custom' }, el('span', null, 'Eigene'), custom))), { onClose: () => this.buildCtx() });
   }
 
   updateUndo() {
@@ -412,22 +531,28 @@ export class EditorUI {
     if (this.sideOpen) this.markCurrentThumb();
   }
 
-  updatePageIndicator() {
+  updatePageIndicator(force) {
     const ed = this.ed;
     if (!ed.pages.length) return;
-    const i = ed.currentIndex();
-    const bm = ed.pages[i] && ed.pages[i].bm;
-    const txt = `${i + 1} / ${ed.pages.length}`;
-    if (this.pgInd.dataset.txt !== txt + bm) {
+    const sec = ed.nb.sections.length > 1 ? ed.section().name + ' · ' : '';
+    let txt, bm = false;
+    if (ed.infinite) txt = sec ? sec.slice(0, -3) : 'Leinwand';
+    else {
+      const i = ed.currentIndex();
+      bm = ed.pages[i] && ed.pages[i].bm;
+      txt = `${sec}${i + 1} / ${ed.pages.length}`;
+    }
+    if (force || this.pgInd.dataset.txt !== txt + bm) {
       this.pgInd.dataset.txt = txt + bm;
-      this.pgInd.innerHTML = (bm ? icon('bookmark', 'bm') : '') + `<span>${txt}</span>`;
+      this.pgInd.innerHTML = (bm ? icon('bookmark', 'bm') : '') + '<span></span>';
+      this.pgInd.lastChild.textContent = txt;
     }
   }
 
   updateZoomIndicator(active) {
     const ed = this.ed;
-    const pct = Math.round((ed.view.s / ed.fitScale()) * 100);
-    const show = active || Math.abs(pct - 100) > 2;
+    const pct = Math.round((ed.view.s / (ed.infinite ? 1 : ed.fitScale())) * 100);
+    const show = active || (ed.infinite ? true : Math.abs(pct - 100) > 2);
     this.zoomInd.hidden = !show;
     if (show) this.zoomInd.textContent = pct + ' %';
   }
@@ -449,14 +574,43 @@ export class EditorUI {
       b.innerHTML = `${icon(ic)}<span>${label}</span>`;
       return b;
     };
+    const it = ed.selectedItems();
+    const hasImg = it && it.images.length;
+    const hasBox = it && (it.images.length || it.texts.length);
     m.append(
       btn('copy', 'Kopieren', () => ed.copySelection()),
       btn('cut', 'Ausschneiden', () => ed.cutSelection()),
-      btn('duplicate', 'Duplizieren', () => ed.duplicateSelection()),
+      btn('duplicate', 'Duplizieren', () => ed.duplicateSelection()));
+    if (hasImg) {
+      const front = it.images.every((im) => im.layer === 'front');
+      m.append(front
+        ? btn('layerBack', 'Hinter Text', () => ed.layerSelection('back'))
+        : btn('layerFront', 'Vor Text', () => ed.layerSelection('front')));
+    }
+    if (hasBox) m.append(btn('lock', 'Sperren', () => ed.lockSelection(true)));
+    m.append(
       btn('palette', 'Farbe', (b) => this.selColor(b)),
       btn('trash', 'Löschen', () => ed.deleteSelection(), true));
     m.hidden = false;
     this.positionSelMenu();
+  }
+
+  /** Gesperrtes Element wurde mit dem Lasso angetippt. */
+  lockedMenu(L, locked, pt) {
+    const ed = this.ed;
+    const anchor = el('span', { style: { position: 'fixed', left: (ed.rect.left + pt.sx) + 'px', top: (ed.rect.top + pt.sy) + 'px', width: '1px', height: '1px' } });
+    document.body.append(anchor);
+    const isImg = locked.kind === 'images';
+    menu(anchor, [
+      { title: isImg ? 'Gesperrtes Bild' : 'Gesperrtes Textfeld' },
+      { label: 'Entsperren', icon: 'unlock', run: () => {
+        ed.setItemProps(L.page, new Set([locked.item.id]), { lock: false });
+        ed.setSelection(L, new Set([locked.item.id]));
+      } },
+      isImg ? { label: locked.item.layer === 'front' ? 'Hinter den Text legen' : 'Vor den Text legen', icon: locked.item.layer === 'front' ? 'layerBack' : 'layerFront', run: () => {
+        ed.setItemProps(L.page, new Set([locked.item.id]), { layer: locked.item.layer === 'front' ? 'back' : 'front' }, ['images']);
+      } } : null,
+    ], { onClose: () => setTimeout(() => anchor.remove(), 200) });
   }
 
   selColor(anchor) {
@@ -474,10 +628,11 @@ export class EditorUI {
     this.selMenu.style.visibility = 'visible';
     const m = this.selMenu;
     const mw = m.offsetWidth, mh = m.offsetHeight;
+    const top = this.topInset();
     let x = (r.x0 + r.x1) / 2 - mw / 2;
     let y = r.y0 - mh - 14;
-    if (y < 8) y = r.y1 + 18;
-    if (y + mh > ed.H - 8) y = Math.max(8, ed.H - mh - 60);
+    if (y < top) y = r.y1 + 18;
+    if (y + mh > ed.H - 8) y = Math.max(top, ed.H - mh - 60);
     x = clamp(x, 8, ed.W - mw - 8);
     m.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
   }
@@ -486,6 +641,7 @@ export class EditorUI {
   toggleSidebar(force) {
     this.sideOpen = force != null ? force : !this.sideOpen;
     this.side.hidden = !this.sideOpen;
+    this.side.style.top = this.topInset() - 4 + 'px';
     this.root.querySelector('[data-a="pages"]').classList.toggle('on', this.sideOpen);
     if (this.sideOpen) {
       this.refreshSidebar();
@@ -497,9 +653,38 @@ export class EditorUI {
   refreshSidebar() {
     if (!this.sideOpen) return;
     const ed = this.ed;
-    const list = this.sideList;
     this.thumbObserver.disconnect();
+    // Kapitel
+    this.sideSecs.innerHTML = '';
+    ed.nb.sections.forEach((sec) => {
+      const n = ed.secPages(sec.id).length;
+      const row = el('div', { class: `sec-row ${sec.id === ed.sec ? 'on' : ''}` },
+        el('span', { class: 'sec-dot', style: { background: sec.color } }),
+        el('span', { class: 'sec-name' }, sec.name),
+        el('span', { class: 'sec-n' }, ed.canvasMode ? '' : String(n)));
+      if (ed.canvasMode) {
+        const holder = el('div', { class: 'thumb-img canvas', dataset: { id: ed.secPages(sec.id)[0].id } });
+        row.append(holder);
+        const t = this.thumbs.get(holder.dataset.id);
+        if (t) holder.append(t.canvas);
+        this.thumbObserver.observe(holder);
+      }
+      const more = el('button', { class: 'thumb-more', 'aria-label': 'Kapitel-Optionen', html: icon('more') });
+      more.addEventListener('click', (e) => {
+        e.stopPropagation();
+        menu(more, [
+          { label: 'Umbenennen & Farbe …', icon: 'pencil', run: () => this.editChapter(sec) },
+          { label: 'Kapitel löschen', icon: 'trash', danger: true, disabled: ed.nb.sections.length < 2, run: () => this.deleteChapter(sec) },
+        ]);
+      });
+      row.append(more);
+      row.addEventListener('click', () => { if (sec.id !== ed.sec) ed.switchSection(sec.id); });
+      this.sideSecs.append(row);
+    });
+    // Seiten
+    const list = this.sideList;
     list.innerHTML = '';
+    if (ed.canvasMode) return;
     const cur = ed.currentIndex();
     let shown = 0;
     ed.pages.forEach((p, i) => {
@@ -531,25 +716,31 @@ export class EditorUI {
 
   renderThumb(id) {
     const ed = this.ed;
-    const p = ed.pages.find((x) => x.id === id);
+    const p = ed.all.find((x) => x.id === id);
     if (!p) return;
     let t = this.thumbs.get(id);
     if (t && t.ver === (p._v || 0) && t.h === p.h) return;
     if (!t) { t = { canvas: document.createElement('canvas') }; this.thumbs.set(id, t); }
-    const W = 150 * Math.min(window.devicePixelRatio || 1, 2);
-    const vis = Math.min(p.h, p.w * 2.2);
+    const W = 160 * Math.min(window.devicePixelRatio || 1, 2);
     const c = t.canvas;
-    renderPageToCanvas(c, { ...p, h: vis }, W / p.w);
+    if (p.infinite) {
+      const R = pageRegion(p, 40);
+      const region = { x: R.x, y: R.y, w: R.w, h: Math.min(R.h, R.w * 0.62) };
+      renderPageToCanvas(c, p, W / region.w, { region });
+    } else {
+      const vis = Math.min(p.h, p.w * 2.2);
+      renderPageToCanvas(c, p, W / p.w, { region: { x: 0, y: 0, w: p.w, h: vis } });
+    }
     t.ver = p._v || 0;
     t.h = p.h;
-    const holder = this.sideList.querySelector(`.thumb-img[data-id="${id}"]`);
+    const holder = this.side.querySelector(`.thumb-img[data-id="${id}"]`);
     if (holder && c.parentNode !== holder) holder.append(c);
   }
 
   renderVisibleThumbs() {
     if (!this.sideOpen) return;
-    const box = this.sideList.getBoundingClientRect();
-    this.sideList.querySelectorAll('.thumb-img').forEach((h) => {
+    const box = this.side.getBoundingClientRect();
+    this.side.querySelectorAll('.thumb-img').forEach((h) => {
       const r = h.getBoundingClientRect();
       if (r.bottom > box.top - 100 && r.top < box.bottom + 100) this.renderThumb(h.dataset.id);
     });
@@ -560,6 +751,7 @@ export class EditorUI {
 
   pageMenu(anchor, i) {
     const ed = this.ed, p = ed.pages[i], n = ed.pages.length;
+    const others = ed.nb.sections.filter((x) => x.id !== ed.sec);
     menu(anchor, [
       { title: `Seite ${i + 1}` },
       { label: 'Neue Seite davor', icon: 'plus', run: () => ed.addPage(i - 1) },
@@ -569,30 +761,52 @@ export class EditorUI {
       { label: 'Vorlage ändern …', icon: 'layout', run: () => this.templateDialog(p) },
       { label: 'Nach oben', icon: 'arrowUp', disabled: i === 0, run: () => ed.movePage(i, -1) },
       { label: 'Nach unten', icon: 'arrowDown', disabled: i === n - 1, run: () => ed.movePage(i, 1) },
+      others.length ? { label: 'In anderes Kapitel …', icon: 'chapter', run: () => this.movePageDialog(p) } : null,
       { sep: true },
       { label: n > 1 ? 'Seite löschen' : 'Seite leeren', icon: 'trash', danger: true, run: () => ed.deletePage(i) },
     ]);
   }
 
+  async movePageDialog(p) {
+    const ed = this.ed;
+    const list = el('div', { class: 'move-list' });
+    for (const sec of ed.nb.sections) {
+      if (sec.id === ed.sec) continue;
+      list.append(el('button', { class: 'move-item', dataset: { id: sec.id } }, el('span', { class: 'sec-dot', style: { background: sec.color } }), el('span', null, sec.name)));
+    }
+    const r = await dialog({
+      title: 'In Kapitel verschieben', body: list, buttons: [{ label: 'Abbrechen', value: null }],
+      onOpen: (box, close) => list.addEventListener('click', (e) => { const b = e.target.closest('.move-item'); if (b) close(b.dataset.id); }),
+    });
+    if (r) { ed.movePageToSection(p, r); toast('Seite verschoben'); }
+  }
+
   // ------------------------------------------------------------ Menüs & Dialoge
   moreMenu(btn) {
     const ed = this.ed;
+    const st = getSettings();
     const i = ed.currentIndex(), p = ed.pages[i];
-    menu(btn, [
+    const items = ed.infinite ? [
+      { title: 'Leinwand' },
+      { label: 'Hintergrund & Muster …', icon: 'layout', run: () => this.templateDialog(p) },
+    ] : [
       { title: `Seite ${i + 1} von ${ed.pages.length}` },
       { label: 'Vorlage & Papier …', icon: 'layout', run: () => this.templateDialog(p) },
       { label: p.bm ? 'Lesezeichen entfernen' : 'Lesezeichen setzen', icon: 'bookmark', run: () => ed.toggleBookmark(p) },
       { label: 'Seite duplizieren', icon: 'duplicate', run: () => ed.duplicatePage(i) },
       { label: ed.pages.length > 1 ? 'Seite löschen' : 'Seite leeren', icon: 'trash', danger: true, run: () => ed.deletePage(i) },
+    ];
+    items.push(
       { sep: true },
       { label: 'Bild einfügen', icon: 'image', run: () => this.pickImage() },
-      { label: 'PDF-Seiten einfügen', icon: 'pdf', run: () => this.importPdf() },
+      { label: ed.infinite ? 'PDF auf die Leinwand legen' : 'PDF-Seiten einfügen', icon: 'pdf', run: () => this.importPdf() },
       { label: 'Exportieren & teilen …', icon: 'share', run: () => this.exportDialog() },
       { sep: true },
+      { label: 'Seiten dunkel anzeigen', icon: 'moon', checked: !!st.darkPages, run: () => { saveSettings({ darkPages: !st.darkPages }); ed.applyPageTheme(); ed.requestRender(); if (!st.darkPages && !document.documentElement.matches('[data-theme="dark"]') && !matchMedia('(prefers-color-scheme: dark)').matches) toast('Wirkt im dunklen Design (Einstellungen → Design)'); } },
       { label: 'Vollbild-Schreiben', icon: 'focus', run: () => this.setFocus(true) },
-      { label: 'Auf Seitenbreite zoomen', icon: 'fit', run: () => { ed.fit(); this.updateZoomIndicator(); } },
-      { label: 'Gesten & Tipps', icon: 'info', run: () => showHelp() },
-    ]);
+      { label: ed.infinite ? 'Alles zeigen' : 'Auf Seitenbreite zoomen', icon: 'fit', run: () => { ed.fit(); this.updateZoomIndicator(); } },
+      { label: 'Gesten & Tipps', icon: 'info', run: () => showHelp() });
+    menu(btn, items);
   }
 
   async pickImage() {
@@ -609,7 +823,7 @@ export class EditorUI {
       const pages = await importPdfPages(f, (fr, t) => prog.set(fr, t));
       prog.close();
       await this.ed.insertPages(pages);
-      toast(`${pages.length} Seite${pages.length === 1 ? '' : 'n'} eingefügt`);
+      if (!this.ed.infinite) toast(`${pages.length} Seite${pages.length === 1 ? '' : 'n'} eingefügt – direkt beschreibbar`);
     } catch (e) {
       console.error(e);
       prog.close();
@@ -620,15 +834,15 @@ export class EditorUI {
   async templateDialog(page) {
     const ed = this.ed;
     let tpl = page.template, paper = page.paper;
-    const picker = templatePicker(tpl, paper, (v) => { tpl = v; });
+    const picker = templatePicker(tpl, paper, (v) => { tpl = v; }, page.infinite ? ['blank', 'lined', 'grid', 'dots'] : null);
     const papers = paperPicker(paper, (v) => { paper = v; picker.setPaper(v); });
     const body = el('div', null,
       page.bg ? el('p', { class: 'muted' }, 'Diese Seite hat einen PDF-Hintergrund. Linien werden darauf nicht angezeigt.') : null,
-      field('Vorlage', picker), field('Papierfarbe', papers));
-    const r = await dialog({
-      title: 'Vorlage & Papier', body, wide: true,
-      buttons: [{ label: 'Abbrechen', value: null }, { label: 'Alle Seiten', value: 'all' }, { label: 'Diese Seite', value: 'one', primary: true }],
-    });
+      field(page.infinite ? 'Muster' : 'Vorlage', picker), field('Papierfarbe', papers));
+    const buttons = page.infinite
+      ? [{ label: 'Abbrechen', value: null }, { label: 'Übernehmen', value: 'one', primary: true }]
+      : [{ label: 'Abbrechen', value: null }, { label: 'Alle Seiten', value: 'all' }, { label: 'Diese Seite', value: 'one', primary: true }];
+    const r = await dialog({ title: page.infinite ? 'Leinwand' : 'Vorlage & Papier', body, wide: true, buttons });
     if (r === 'one') ed.setPageProps(page, { template: tpl, paper });
     else if (r === 'all') {
       ed.setPagesProps(ed.pages, { template: tpl, paper });
@@ -643,10 +857,12 @@ export class EditorUI {
     let hideTape = false;
     const opt = (ic, title, sub, value) => el('button', { class: 'opt', dataset: { v: value } },
       el('span', { class: 'opt-ic', html: icon(ic) }), el('span', { class: 'opt-txt' }, el('b', null, title), el('small', null, sub)));
+    const nAll = ed.all.length;
     const list = el('div', { class: 'opt-list' },
-      opt('pdf', 'Notizbuch als PDF', `${ed.pages.length} Seite${ed.pages.length === 1 ? '' : 'n'}`, 'pdf-all'),
-      opt('file', 'Aktuelle Seite als PDF', `Seite ${ed.currentIndex() + 1}`, 'pdf-page'),
-      opt('image', 'Aktuelle Seite als Bild', 'PNG – z. B. für Nachrichten', 'png'),
+      opt('pdf', 'Ganzes Buch als PDF', `${nAll} ${ed.canvasMode ? 'Leinwand' : 'Seite'}${nAll === 1 ? '' : (ed.canvasMode ? 'en' : 'n')} · alle Kapitel`, 'pdf-all'),
+      ed.nb.sections.length > 1 ? opt('chapter', 'Dieses Kapitel als PDF', ed.section().name, 'pdf-sec') : null,
+      !ed.infinite ? opt('file', 'Aktuelle Seite als PDF', `Seite ${ed.currentIndex() + 1}`, 'pdf-page') : null,
+      opt('image', ed.infinite ? 'Leinwand als Bild' : 'Aktuelle Seite als Bild', 'PNG – z. B. für Nachrichten', 'png'),
       opt('notebook', 'FingerNote-Datei', 'Zum Sichern oder Weitergeben – mit FingerNote wieder öffnen', 'fn'));
     const tapeRow = el('label', { class: 'row-toggle' }, el('span', null, 'Lernband im Export ausblenden'), toggle(false, (v) => { hideTape = v; }));
     const r = await dialog({
@@ -659,15 +875,16 @@ export class EditorUI {
     await ed.save();
     const name = safeFileName(ed.nb.name);
     try {
-      if (r === 'pdf-all' || r === 'pdf-page') {
-        const pages = r === 'pdf-all' ? ed.pages : [ed.pages[ed.currentIndex()]];
+      if (r.startsWith('pdf')) {
+        const pages = r === 'pdf-all' ? ed.nb.sections.flatMap((s) => ed.secPages(s.id)) : r === 'pdf-sec' ? ed.pages : [ed.pages[ed.currentIndex()]];
         const prog = progress('PDF wird erstellt');
         const blob = await exportPdf(ed.nb.name, pages, { hideTape }, (f, t) => prog.set(f, t));
         prog.close();
-        await offerFile(blob, `${name}${r === 'pdf-page' ? ` – Seite ${ed.currentIndex() + 1}` : ''}.pdf`, 'PDF ist fertig');
+        const suffix = r === 'pdf-page' ? ` – Seite ${ed.currentIndex() + 1}` : r === 'pdf-sec' ? ` – ${safeFileName(ed.section().name)}` : '';
+        await offerFile(blob, `${name}${suffix}.pdf`, 'PDF ist fertig');
       } else if (r === 'png') {
         const blob = await exportPageImage(ed.pages[ed.currentIndex()], { hideTape });
-        await offerFile(blob, `${name} – Seite ${ed.currentIndex() + 1}.png`, 'Bild ist fertig');
+        await offerFile(blob, `${name}${ed.infinite ? '' : ` – Seite ${ed.currentIndex() + 1}`}.png`, 'Bild ist fertig');
       } else if (r === 'fn') {
         const blob = await store.exportData([ed.nb.id]);
         await offerFile(blob, `${name}.fingernote.json`, 'Datei ist fertig');
@@ -688,5 +905,3 @@ function fmtW(v, tool) {
   if (tool === 'eraser') return Math.round(v) + ' px';
   return (Math.round(v * 0.21 * 10) / 10).toLocaleString('de-DE') + ' mm';
 }
-
-export { getSettings };

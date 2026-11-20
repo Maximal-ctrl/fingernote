@@ -34,6 +34,7 @@ export const fontStr = (size, bold, italic) => `${italic ? 'italic ' : ''}${bold
 
 // ---------------------------------------------------------------- Papier
 export function drawPaper(ctx, page, vis) {
+  if (page.infinite) { drawInfinitePaper(ctx, page, vis); return; }
   const P = PAPERS[page.paper] || PAPERS.white;
   const W = page.w, H = page.h;
   ctx.fillStyle = P.bg;
@@ -112,6 +113,55 @@ export function drawPaper(ctx, page, vis) {
     }
     default: break;
   }
+}
+
+/** Unendliche Leinwand: Muster nur im sichtbaren Bereich, ohne Rand. */
+function drawInfinitePaper(ctx, page, vis) {
+  const P = PAPERS[page.paper] || PAPERS.white;
+  const v = vis || { x0: 0, y0: 0, x1: page.w, y1: page.h };
+  const x0 = v.x0 - 2, y0 = v.y0 - 2, x1 = v.x1 + 2, y1 = v.y1 + 2;
+  ctx.fillStyle = P.bg;
+  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  const k = ctx.getTransform ? Math.abs(ctx.getTransform().a) || 1 : 1;
+  // bei starkem Herauszoomen Muster ausdünnen
+  let sp = page.template === 'lined' ? 34 : 25;
+  while (sp * k < 7) sp *= 2;
+  ctx.strokeStyle = P.line;
+  ctx.lineWidth = Math.max(0.8, 0.85 / k);
+  if (page.template === 'grid') {
+    ctx.beginPath();
+    for (let x = Math.floor(x0 / sp) * sp; x <= x1; x += sp) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
+    for (let y = Math.floor(y0 / sp) * sp; y <= y1; y += sp) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+    ctx.stroke();
+  } else if (page.template === 'lined') {
+    ctx.beginPath();
+    for (let y = Math.floor(y0 / sp) * sp; y <= y1; y += sp) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+    ctx.stroke();
+  } else if (page.template === 'dots') {
+    const r = Math.max(1.4, 0.8 / k);
+    ctx.fillStyle = P.strong;
+    ctx.beginPath();
+    for (let y = Math.floor(y0 / sp) * sp; y <= y1; y += sp) {
+      for (let x = Math.floor(x0 / sp) * sp; x <= x1; x += sp) { ctx.moveTo(x + r, y); ctx.arc(x, y, r, 0, Math.PI * 2); }
+    }
+    ctx.fill();
+  }
+}
+
+/** Bereich einer Seite, der gezeichnet/exportiert wird (Leinwand: um den Inhalt herum). */
+export function pageRegion(page, pad = 80) {
+  if (!page.infinite) return { x: 0, y: 0, w: page.w, h: page.h };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const add = (a, b, c, d) => { x0 = Math.min(x0, a); y0 = Math.min(y0, b); x1 = Math.max(x1, c); y1 = Math.max(y1, d); };
+  for (const st of page.strokes) { const b = geom(st).bbox; add(b.x0, b.y0, b.x1, b.y1); }
+  for (const t of page.texts) add(t.x, t.y, t.x + t.w, t.y + textHeight(t));
+  for (const im of page.images) add(im.x, im.y, im.x + im.w, im.y + im.h);
+  if (x0 === Infinity) return { x: 0, y: 0, w: 1000, h: 1414 };
+  x0 -= pad; y0 -= pad; x1 += pad; y1 += pad;
+  // nicht zu schmal/flach, damit Vorschaubilder gut aussehen
+  const w = Math.max(x1 - x0, 700), h = Math.max(y1 - y0, 500);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  return { x: cx - w / 2, y: cy - h / 2, w, h };
 }
 
 // ---------------------------------------------------------------- Bilder
@@ -503,13 +553,21 @@ const isect = (b, v) => !v || !(b.x1 < v.x0 || b.x0 > v.x1 || b.y1 < v.y0 || b.y
 export function drawContent(ctx, page, opts = {}) {
   const { skip, hideTape, vis, editing } = opts;
   const dark = page.paper === 'dark';
-  for (const im of page.images) {
-    if (skip && skip.has(im.id)) continue;
-    if (!isect({ x0: im.x, y0: im.y, x1: im.x + im.w, y1: im.y + im.h }, vis)) continue;
-    const img = getImage(im.blob);
-    if (img) ctx.drawImage(img, im.x, im.y, im.w, im.h);
-    else { ctx.fillStyle = 'rgba(128,128,128,0.15)'; ctx.fillRect(im.x, im.y, im.w, im.h); }
-  }
+  // Bilder: „hinter Text“ (Standard) ganz unten, „vor Text“ über der Schrift
+  const images = (front) => {
+    for (const im of page.images) {
+      if (!!front !== (im.layer === 'front')) continue;
+      if (skip && skip.has(im.id)) continue;
+      if (!isect({ x0: im.x, y0: im.y, x1: im.x + im.w, y1: im.y + im.h }, vis)) continue;
+      const img = getImage(im.blob);
+      if (img) {
+        if (im.op != null && im.op < 1) ctx.globalAlpha = im.op;
+        ctx.drawImage(img, im.x, im.y, im.w, im.h);
+        ctx.globalAlpha = 1;
+      } else { ctx.fillStyle = 'rgba(128,128,128,0.15)'; ctx.fillRect(im.x, im.y, im.w, im.h); }
+    }
+  };
+  images(false);
   for (const s of page.strokes) {
     if (s.t !== 'marker' || (skip && skip.has(s.id))) continue;
     if (isect(geom(s).bbox, vis)) drawStroke(ctx, s);
@@ -522,6 +580,7 @@ export function drawContent(ctx, page, opts = {}) {
     if (s.t === 'marker' || s.t === 'tape' || (skip && skip.has(s.id))) continue;
     if (isect(geom(s).bbox, vis)) drawStroke(ctx, s);
   }
+  images(true);
   if (!hideTape) {
     for (const s of page.strokes) {
       if (s.t !== 'tape' || (skip && skip.has(s.id))) continue;
@@ -532,15 +591,18 @@ export function drawContent(ctx, page, opts = {}) {
 
 /** Komplette Seite in einen Canvas zeichnen (Vorschaubild, Zwischenspeicher, Export). */
 export function renderPageToCanvas(canvas, page, scale, opts = {}) {
-  const w = Math.max(1, Math.round(page.w * scale));
-  const h = Math.max(1, Math.round(page.h * scale));
+  const R = opts.region || pageRegion(page);
+  const w = Math.max(1, Math.round(R.w * scale));
+  const h = Math.max(1, Math.round(R.h * scale));
   if (canvas.width !== w) canvas.width = w;
   if (canvas.height !== h) canvas.height = h;
   const ctx = canvas.getContext('2d');
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, w, h);
-  ctx.setTransform(w / page.w, 0, 0, h / page.h, 0, 0);
-  drawPaper(ctx, page);
+  const kx = w / R.w, ky = h / R.h;
+  ctx.setTransform(kx, 0, 0, ky, -R.x * kx, -R.y * ky);
+  const vis = { x0: R.x, y0: R.y, x1: R.x + R.w, y1: R.y + R.h };
+  drawPaper(ctx, page, page.infinite ? vis : undefined);
   drawContent(ctx, page, opts);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   return canvas;
