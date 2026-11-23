@@ -3,7 +3,7 @@
 import { el, uid, clamp, debounce, safeFileName, dateStamp, getSettings, saveSettings } from './util.js';
 import { icon } from './icons.js';
 import { toast, dialog, menu, prompt, confirm, progress, closePopover, toggle } from './ui.js';
-import { SYMBOLS, CATEGORIES, INSTALL_CATEGORIES, xf, partPins, partBox, isVertical, drawSymbol, getSym, registerCustom, unregisterCustom, allSymbols } from './schem-symbols.js';
+import { SYMBOLS, CATEGORIES, INSTALL_CATEGORIES, CABINET_CATEGORIES, cab, xf, partPins, partBox, isVertical, drawSymbol, getSym, registerCustom, unregisterCustom, allSymbols } from './schem-symbols.js';
 import * as store from './store.js';
 import { buildPdf } from './pdfio.js';
 import { offerFile } from './editor-ui.js';
@@ -107,11 +107,13 @@ class CanvasPen {
     if (fill) { c.fillStyle = fill; c.fill(); }
     if (stroke) { c.strokeStyle = stroke; c.lineWidth = this.lw; c.stroke(); }
   }
-  text(x, y, s, size, align, color, base = 'alphabetic', bold) {
+  text(x, y, s, size, align, color, base = 'alphabetic', bold, rot) {
     const c = this.ctx;
+    if (rot) { c.save(); c.translate(x, y); c.rotate(-Math.PI / 2); x = 0; y = 0; }
     c.font = `${bold ? '600 ' : ''}${size}px -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
     c.textAlign = align || 'left'; c.textBaseline = base; c.fillStyle = color;
     c.fillText(s, x, y);
+    if (rot) c.restore();
   }
 }
 
@@ -125,10 +127,10 @@ class SvgPen {
     this.out.push(`<${close ? 'polygon' : 'polyline'} points="${p.join(' ')}" fill="${fill || 'none'}" stroke="${stroke || 'none'}" stroke-width="${lw || LW}" stroke-linejoin="round" stroke-linecap="round"/>`);
   }
   circle(cx, cy, r, fill, stroke) { this.out.push(`<circle cx="${this.f(cx)}" cy="${this.f(cy)}" r="${this.f(r)}" fill="${fill || 'none'}" stroke="${stroke || 'none'}" stroke-width="${LW}"/>`); }
-  text(x, y, s, size, align, color, base = 'alphabetic', bold) {
+  text(x, y, s, size, align, color, base = 'alphabetic', bold, rot) {
     const anchor = align === 'center' ? 'middle' : align === 'right' ? 'end' : 'start';
     const dy = base === 'middle' ? ' dominant-baseline="central"' : '';
-    this.out.push(`<text x="${this.f(x)}" y="${this.f(y)}" font-size="${size}" font-family="Arial, Helvetica, sans-serif"${bold ? ' font-weight="600"' : ''} text-anchor="${anchor}"${dy} fill="${color}">${this.esc(s)}</text>`);
+    this.out.push(`<text x="${this.f(x)}" y="${this.f(y)}" font-size="${size}" font-family="Arial, Helvetica, sans-serif"${bold ? ' font-weight="600"' : ''} text-anchor="${anchor}"${dy}${rot ? ` transform="rotate(-90 ${this.f(x)} ${this.f(y)})"` : ''} fill="${color}">${this.esc(s)}</text>`);
   }
   svg(w, h) { return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}"><rect width="${w}" height="${h}" fill="#fff"/>${this.out.join('')}</svg>`; }
 }
@@ -302,6 +304,50 @@ export function analyze(sheets) {
 }
 
 // ---------------------------------------------------------------- Blatt zeichnen
+function drawWall(pen, w, isSel) {
+    const c = isSel ? SEL : '#55555e';
+    if (!w.kind || w.kind === 'wall') { pen.poly(w.pts, false, null, c, w.t || 2.4); return; }
+    const [ax, ay, bx, by] = w.pts;
+    if (w.kind === 'plate') {
+      const x0 = Math.min(ax, bx), y0 = Math.min(ay, by), x1 = Math.max(ax, bx), y1 = Math.max(ay, by);
+      pen.poly([x0, y0, x1, y0, x1, y1, x0, y1], true, '#f3f4f6', isSel ? SEL : '#6c707a', 0.5);
+      const r = Math.min(3, (x1 - x0) * 0.02);
+      for (const [hx, hy] of [[x0 + 4 * r, y0 + 4 * r], [x1 - 4 * r, y0 + 4 * r], [x0 + 4 * r, y1 - 4 * r], [x1 - 4 * r, y1 - 4 * r]]) pen.circle(hx, hy, r, '#ffffff', '#9aa0a8');
+      if (w.label) pen.text(x0, y1 + 3.2, w.label, 2.2, 'left', '#6c707a');
+      return;
+    }
+    // Hutschiene / Kabelkanal: Band entlang einer Geraden
+    const horiz = Math.abs(ay - by) <= Math.abs(ax - bx);
+    const t = w.t || 7;
+    const x0 = horiz ? Math.min(ax, bx) : ax - t / 2, x1 = horiz ? Math.max(ax, bx) : ax + t / 2;
+    const y0 = horiz ? ay - t / 2 : Math.min(ay, by), y1 = horiz ? ay + t / 2 : Math.max(ay, by);
+    const len = horiz ? x1 - x0 : y1 - y0;
+    const k = w.k || 0.2;
+    if (w.kind === 'rail') {
+      pen.poly([x0, y0, x1, y0, x1, y1, x0, y1], true, '#c3c8cf', isSel ? SEL : '#7d838c', 0.3);
+      const e = t * 0.14;
+      if (horiz) { pen.line(x0, y0 + e, x1, y0 + e, '#8d939c'); pen.line(x0, y1 - e, x1, y1 - e, '#8d939c'); }
+      else { pen.line(x0 + e, y0, x0 + e, y1, '#8d939c'); pen.line(x1 - e, y0, x1 - e, y1, '#8d939c'); }
+      // Langlöcher 15 × 5,2 mm im Raster 25 mm
+      const sl = 15 * k, sw = 5.2 * k, pitch = 25 * k;
+      for (let d = pitch / 2; d + sl / 2 < len; d += pitch) {
+        const cx = horiz ? x0 + d : (x0 + x1) / 2, cy = horiz ? (y0 + y1) / 2 : y0 + d;
+        const hw = horiz ? sl / 2 : sw / 2, hh = horiz ? sw / 2 : sl / 2;
+        pen.poly([cx - hw, cy - hh, cx + hw, cy - hh, cx + hw, cy + hh, cx - hw, cy + hh], true, '#ffffff', '#8d939c', 0.2);
+      }
+    } else {
+      pen.poly([x0, y0, x1, y0, x1, y1, x0, y1], true, '#a9aeb6', isSel ? SEL : '#6c707a', 0.3);
+      const step = 12.5 * k, fin = t * 0.22;
+      for (let d = step; d < len; d += step) {
+        if (horiz) { pen.line(x0 + d, y0, x0 + d, y0 + fin, '#7d838c'); pen.line(x0 + d, y1, x0 + d, y1 - fin, '#7d838c'); }
+        else { pen.line(x0, y0 + d, x0 + fin, y0 + d, '#7d838c'); pen.line(x1, y0 + d, x1 - fin, y0 + d, '#7d838c'); }
+      }
+      if (w.label && len > 30) pen.text((x0 + x1) / 2, (y0 + y1) / 2, w.label, Math.min(2.4, t * 0.45), 'center', '#3d424d', 'middle', false, !horiz);
+    }
+  }
+
+function renderSheetWallsOnly(pen, w) { drawWall(pen, w, true); }
+
 export function renderSheet(pen, sheets, idx, A, meta = {}, opt = {}) {
   const sh = sheets[idx];
   const S = SHEET_SIZES[sh.size] || SHEET_SIZES.A4;
@@ -330,10 +376,8 @@ export function renderSheet(pen, sheets, idx, A, meta = {}, opt = {}) {
   lab(tx + 81.5, ty + 18.7, 'Blatt'); pen.text(tx + 81.5, ty + 21.3, `${idx + 1} von ${sheets.length}${sh.meta.rev ? '   Rev. ' + sh.meta.rev : ''}${sh.meta.scale ? '   M ' + sh.meta.scale : ''}`, 2.4, 'left', INK);
 
   // Wände (Installationsplan)
-  for (const w of sh.walls || []) {
-    const c = sel && sel.walls && sel.walls.has(w.id) ? SEL : '#55555e';
-    pen.poly(w.pts, false, null, c, w.t || 2.4);
-  }
+  const order = { plate: 0, duct: 1, rail: 2 };
+  for (const w of [...(sh.walls || [])].sort((a, b) => (order[a.kind] ?? 3) - (order[b.kind] ?? 3))) drawWall(pen, w, sel && sel.walls && sel.walls.has(w.id));
 
   // Leitungen
   for (const w of sh.wires) {
@@ -377,6 +421,22 @@ export function renderSheet(pen, sheets, idx, A, meta = {}, opt = {}) {
       pen.poly([lx - 0.75, ly, lx - 0.75, ly - 0.9, lx + 0.75, ly - 0.9, lx + 0.75, ly], false, null, '#9a9aa3');
     }
     if (sym.kind === 'gnd' || sym.kind === 'deco') continue;
+    if (sym.kind === 'cab') {
+      const bw = box.x1 - box.x0, bh = box.y1 - box.y0;
+      const narrow = bw < bh * 0.45;
+      const fs = Math.max(0.9, Math.min(3, (narrow ? bh : bw) * 0.09, (narrow ? bw : bh) * 0.45));
+      const cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
+      const dark = ['#3b4048', '#2f333a', '#1f2329', '#2f8a46', '#1d4fa0'].includes(sym.ops[0][5]);
+      const tc = isSel ? SEL : dark ? '#ffffff' : '#16161a';
+      if (sym.din && bw < 12) {
+        // schmale Hutschienengeräte: BMK senkrecht über dem Gerät (wie im Aufbauplan üblich)
+        if (part.ref) pen.text(cx + 0.6, box.y0 - 0.8, part.ref, Math.min(1.9, Math.max(1, bw * 0.55)), 'left', isSel ? SEL : '#16161a', 'alphabetic', true, true);
+      } else {
+        if (part.ref) pen.text(cx, cy - (narrow ? 0 : fs * 0.3), part.ref, fs, 'center', tc, 'middle', true, narrow);
+        if (part.val && !narrow && bh > fs * 4) pen.text(cx, cy + fs * 1.1, part.val, fs * 0.75, 'center', tc, 'middle');
+      }
+      continue;
+    }
     if (String(sym.cat).startsWith('Installation') && !part.showRef) {
       if (part.val) pen.text(box.x1 + 1, box.y0 - 0.6, part.val, 2.2, 'left', c);
       continue;
@@ -515,13 +575,15 @@ export class SchematicEditor {
 
   buildTools() {
     const inst = this.kind === 'install';
+    const cabm = this.kind === 'cabinet';
     const T = (k, ic, t) => `<button class="tb" data-tool="${k}" title="${t}" aria-label="${t}">${icon(ic)}</button>`;
     const A = (k, ic, t) => `<button class="tb" data-a="${k}" title="${t}" aria-label="${t}">${icon(ic)}</button>`;
     this.toolsEl.innerHTML = [
       T('select', 'cursor', 'Auswählen & verschieben (V)'),
       T('lasso', 'lasso', 'Lasso-Auswahl (L)'),
-      T('wire', 'wire', inst ? 'Leitung ziehen (W)' : 'Verdrahten (W)'),
-      inst ? T('wall', 'layout', 'Wand zeichnen') : A('netlabel', 'tag', 'Potential setzen (L1, N, PE, +24V …)'),
+      cabm ? T('plate', 'layout', 'Montageplatte aufziehen') : T('wire', 'wire', inst ? 'Leitung ziehen (W)' : 'Verdrahten (W)'),
+      cabm ? T('rail', 'rail', 'Hutschiene ziehen') : inst ? T('wall', 'layout', 'Wand zeichnen') : A('netlabel', 'tag', 'Potential setzen (L1, N, PE, +24V …)'),
+      cabm ? T('duct', 'duct', 'Kabelkanal ziehen') : null,
       T('draw', 'pen', 'Stift – frei zeichnen (P)'),
       T('erase', 'eraser', 'Radierer für Freihand (E)'),
       T('text', 'text', 'Text (T)'),
@@ -531,8 +593,8 @@ export class SchematicEditor {
       A('lock', 'lock', 'Sperren / Entsperren'),
       A('delete', 'trash', 'Löschen (Entf)'),
       '<span class="tb-sep"></span>',
-      A('check', 'checkCircle', 'Plan prüfen'),
-    ].join('');
+      cabm ? null : A('check', 'checkCircle', 'Plan prüfen'),
+    ].filter(Boolean).join('');
   }
 
   fillLib(q) {
@@ -540,20 +602,20 @@ export class SchematicEditor {
     list.innerHTML = '';
     const s = q.trim().toLowerCase();
     const syn = { schütz: 'relais spule kontakt', lampe: 'leuchte', erde: 'masse pe schutzleiter', taster: 'taster', klemme: 'klemme', quelle: 'batterie spannung' };
-    const cats = this.kind === 'install' ? INSTALL_CATEGORIES : CATEGORIES;
+    const cats = this.kind === 'install' ? INSTALL_CATEGORIES : this.kind === 'cabinet' ? CABINET_CATEGORIES : CATEGORIES;
     for (const cat of cats) {
       if (cat === 'Eigene Bauteile' && !s) {
         // eigene Bauteile + Baukasten
         list.append(el('div', { class: 'nav-h' }, cat));
         const grid = el('div', { class: 'sym-grid' });
-        const add = el('button', { class: 'sym-tile add', title: 'Eigenes Bauteil erstellen', html: `${icon('plus')}<span>Neues Bauteil</span>` });
-        add.addEventListener('click', () => this.symbolEditor());
+        const add = el('button', { class: 'sym-tile add', title: 'Eigenes Bauteil erstellen', html: `${icon('plus')}<span>${this.kind === 'cabinet' ? 'Neues Gerät' : 'Neues Bauteil'}</span>` });
+        add.addEventListener('click', () => (this.kind === 'cabinet' ? this.deviceEditor() : this.symbolEditor()));
         grid.append(add);
-        for (const [k, v] of Object.entries(allSymbols()).filter(([, v]) => v.custom)) {
+        for (const [k, v] of Object.entries(allSymbols()).filter(([, v]) => v.custom && (v.kind === 'cab') === (this.kind === 'cabinet'))) {
           const b = el('button', { class: `sym-tile ${this.placeType === k && this.tool === 'place' ? 'on' : ''}`, title: v.name }, symbolPreview(k), el('span', null, v.name));
           b.addEventListener('click', () => this.startPlace(k));
           const ed = el('button', { class: 'sym-edit', 'aria-label': 'Bearbeiten', html: icon('pencil') });
-          ed.addEventListener('click', (e) => { e.stopPropagation(); this.symbolEditor(v); });
+          ed.addEventListener('click', (e) => { e.stopPropagation(); if (v.kind === 'cab') this.deviceEditor(v); else this.symbolEditor(v); });
           b.append(ed);
           grid.append(b);
         }
@@ -582,7 +644,8 @@ export class SchematicEditor {
     this.pages = data.pages;
     for (const p of this.pages) if (!p.sch) p.sch = newSheetData(this.nb.schSize || 'A4', 'Blatt');
     this.nb.schMeta = this.nb.schMeta || { project: this.nb.name, author: '', company: '' };
-    this.kind = this.nb.mode === 'install' ? 'install' : 'schematic';
+    this.kind = this.nb.mode === 'install' ? 'install' : this.nb.mode === 'cabinet' ? 'cabinet' : 'schematic';
+    this.cabK = 1 / (this.nb.cabScale || 5);
     for (const p of this.pages) { p.sch.ink = p.sch.ink || []; p.sch.walls = p.sch.walls || []; }
     // eigene Bauteile: Bibliothek des Kontos + im Plan gespeicherte Kopien
     registerCustom(getSettings().schCustom || []);
@@ -728,7 +791,7 @@ export class SchematicEditor {
     // Vorschau: Bauteil platzieren
     if (this.tool === 'place' && this.ghostAt) {
       c.globalAlpha = 0.55;
-      drawSymbol(pen, { type: this.placeType, x: this.ghostAt[0], y: this.ghostAt[1], rot: this.placeRot, mir: this.placeMir }, SEL);
+      drawSymbol(pen, { type: this.placeType, x: this.ghostAt[0], y: this.ghostAt[1], rot: this.placeRot, mir: this.placeMir, k: getSym(this.placeType)?.kind === 'cab' ? this.cabK : 1 }, SEL);
       c.globalAlpha = 1;
     }
     // Vorschau: Leitung
@@ -737,6 +800,9 @@ export class SchematicEditor {
       if (p.length >= 4) pen.poly(p, false, null, this.draft.wall ? 'rgba(85,85,94,.6)' : SEL, this.draft.wall ? (this.wallT || 4.8) : Math.max(0.5, 2 / v.s));
       c.fillStyle = SEL;
       for (let i = 0; i < p.length; i += 2) { c.beginPath(); c.arc(p[i], p[i + 1], Math.max(0.5, 2.5 / v.s), 0, 7); c.fill(); }
+    }
+    if (this.shapeDraft) {
+      renderSheetWallsOnly(pen, this.shapeDraft);
     }
     // Freihand in Arbeit
     if (this.inkDraft) {
@@ -853,6 +919,10 @@ export class SchematicEditor {
       }
       box.append(sep());
       [[0.35, 'fein'], [0.6, 'mittel'], [1.2, 'dick'], [4, 'Marker']].forEach(([w, l]) => box.append(btn(l, () => { this.setInk({ w }); this.setTool('draw'); }, ink.w === w ? 'on' : '')));
+    } else if (this.tool === 'rail' || this.tool === 'duct' || this.tool === 'plate') {
+      if (this.tool === 'plate') box.append(hint('Montageplatte: Ecke zu Ecke ziehen'));
+      if (this.tool === 'rail') box.append(hint('Hutschiene ziehen'), sep(), btn('TS35', () => { this.railW = 35; this.updateCtx(); }, (this.railW || 35) === 35 ? 'on' : ''), btn('TS15', () => { this.railW = 15; this.updateCtx(); }, this.railW === 15 ? 'on' : ''));
+      if (this.tool === 'duct') { box.append(hint('Kabelkanal ziehen'), sep()); [25, 40, 60, 80].forEach((d) => box.append(btn(`${d} mm`, () => { this.ductW = d; this.updateCtx(); }, (this.ductW || 60) === d ? 'on' : ''))); }
     } else if (this.tool === 'wall') {
       box.append(hint('Wand: Start antippen, Ecken antippen, doppelt tippen beendet · oder ziehen'), sep(),
         btn('Außenwand', () => { this.wallT = 4.8; this.updateCtx(); }, (this.wallT || 4.8) === 4.8 ? 'on' : ''),
@@ -1065,10 +1135,16 @@ export class SchematicEditor {
       return;
     }
     if (T === 'text') { this.drag = { kind: 'tap' }; return; }
-    if (finger && this.fingerPans() && ['wire', 'wall', 'draw', 'erase', 'lasso'].includes(T)) { this.drag = { kind: 'pan', v: { ...this.view } }; return; }
+    if (finger && this.fingerPans() && ['wire', 'wall', 'draw', 'erase', 'lasso', 'plate', 'rail', 'duct'].includes(T)) { this.drag = { kind: 'pan', v: { ...this.view } }; return; }
     if (T === 'wire' || T === 'wall') {
       const s = (T === 'wire' ? this.snapTarget(wx, wy, tol) : this.wallSnap(wx, wy, tol)) || [snap(wx, T === 'wall' ? 2.5 : GRID), snap(wy, T === 'wall' ? 2.5 : GRID)];
       this.drag = { kind: 'wire', start: s, wall: T === 'wall' };
+      return;
+    }
+    if (T === 'plate' || T === 'rail' || T === 'duct') {
+      const g = 1.25;
+      this.drag = { kind: 'shape', shape: T, a: [snap(wx, g), snap(wy, g)] };
+      this.shapeDraft = null;
       return;
     }
     if (T === 'draw') {
@@ -1123,7 +1199,11 @@ export class SchematicEditor {
     const [wx, wy] = this.toWorld(p.sx, p.sy);
     if (!q) {
       // Schweben (Maus/Pencil)
-      if (this.tool === 'place') { this.ghostAt = [snap(wx), snap(wy)]; this.draw(); }
+      if (this.tool === 'place') {
+        this.ghostAt = [snap(wx), snap(wy)];
+        if (this.kind === 'cabinet' && getSym(this.placeType)?.kind === 'cab') { const g = { type: this.placeType, x: snap(wx, 0.5), y: snap(wy, 0.5), k: this.cabK, rot: this.placeRot || 0 }; this.dock(g); this.ghostAt = [g.x, g.y]; }
+        this.draw();
+      }
       if (this.tool === 'wire' || this.tool === 'wall') {
         this.hover = this.tool === 'wire' ? this.snapTarget(wx, wy, 9 / this.view.s) : null;
         if (this.draft) this.draft.cursor = this.hover || [snap(wx, this.tool === 'wall' ? 2.5 : GRID), snap(wy, this.tool === 'wall' ? 2.5 : GRID)];
@@ -1156,11 +1236,18 @@ export class SchematicEditor {
       return;
     }
     if (dr.kind === 'erase') { this.eraseAt(wx, wy); return; }
+    if (dr.kind === 'shape') { this.shapeDraft = this.makeShape(dr.shape, dr.a, [snap(wx, 1.25), snap(wy, 1.25)]); this.draw(); return; }
     if (!D.moved && Math.hypot(p.sx - D.sx, p.sy - D.sy) > 6) D.moved = true;
     if (!D.moved) return;
     if (dr.kind === 'pan') { this.view.x = dr.v.x + p.sx - D.sx; this.view.y = dr.v.y + p.sy - D.sy; this.draw(); return; }
     if (dr.kind === 'tap' && p.type === 'touch') { dr.kind = 'pan'; dr.v = { ...this.view }; return; }
-    if (dr.kind === 'move') { this.applyMove(dr.orig, snap(wx - D.wx), snap(wy - D.wy)); this.draw(); return; }
+    if (dr.kind === 'move') {
+      const g = this.kind === 'cabinet' ? 0.5 : GRID;
+      this.applyMove(dr.orig, snap(wx - D.wx, g), snap(wy - D.wy, g));
+      if (this.kind === 'cabinet' && this.sel.parts.size === 1 && !this.sel.walls.size) { const part = this.sh.parts.find((x) => this.sel.parts.has(x.id)); if (part && getSym(part.type)?.kind === 'cab') this.dock(part); }
+      this.draw();
+      return;
+    }
     if (dr.kind === 'seg') { this.applySeg(dr, snap(wx - D.wx), snap(wy - D.wy)); this.draw(); return; }
     if (dr.kind === 'band') { this.band = [D.wx, D.wy, wx, wy]; this.draw(); return; }
     if (dr.kind === 'lasso') { const L = this.lassoPts; if (Math.hypot(wx - L[L.length - 2], wy - L[L.length - 1]) > 0.8) L.push(wx, wy); this.draw(); return; }
@@ -1199,7 +1286,7 @@ export class SchematicEditor {
         break;
       case 'tap':
         if (D.moved) break;
-        if (this.tool === 'place') this.placeAt(snap(wx), snap(wy));
+        if (this.tool === 'place') this.placeAt(this.kind === 'cabinet' ? snap(wx, 0.5) : snap(wx), this.kind === 'cabinet' ? snap(wy, 0.5) : snap(wy));
         else if (this.tool === 'text') this.addText(snap(wx, 2.5), snap(wy, 2.5));
         break;
       case 'locked':
@@ -1227,6 +1314,16 @@ export class SchematicEditor {
       case 'erase':
         if (dr.hit) this.commit(dr.before);
         break;
+      case 'shape': {
+        const sh = this.makeShape(dr.shape, dr.a, [snap(wx, 1.25), snap(wy, 1.25)]);
+        this.shapeDraft = null;
+        if (sh && (Math.abs(sh.pts[2] - sh.pts[0]) > 3 || Math.abs(sh.pts[3] - sh.pts[1]) > 3)) {
+          const before = this.snap();
+          this.sh.walls.push(sh);
+          this.commit(before);
+        } else this.draw();
+        break;
+      }
       case 'lasso': {
         const poly = this.lassoPts;
         this.lassoPts = null;
@@ -1271,6 +1368,81 @@ export class SchematicEditor {
     }
   }
 
+  // ------------------------------------------------------------ Aufbauplan
+  makeShape(kind, a, b) {
+    const k = this.cabK;
+    if (kind === 'plate') return { id: uid(), kind, pts: [a[0], a[1], b[0], b[1]], label: `Montageplatte ${Math.round(Math.abs(b[0] - a[0]) / k)} × ${Math.round(Math.abs(b[1] - a[1]) / k)} mm` };
+    const horiz = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]);
+    const real = kind === 'rail' ? (this.railW || 35) : (this.ductW || 60);
+    const pts = horiz ? [a[0], a[1], b[0], a[1]] : [a[0], a[1], a[0], b[1]];
+    return { id: uid(), kind, pts, t: real * k, k, label: kind === 'duct' ? `Kabelkanal ${real}` : `TS${real}` };
+  }
+
+  /** Gerät auf eine Hutschiene einrasten und an Nachbargeräte andocken. */
+  dock(part) {
+    const b0 = partBox(part);
+    const h = b0.y1 - b0.y0, w = b0.x1 - b0.x0;
+    let best = null, bd = Infinity;
+    for (const r of this.sh.walls) {
+      if (r.kind !== 'rail' || Math.abs(r.pts[1] - r.pts[3]) > 0.01) continue;
+      const x0 = Math.min(r.pts[0], r.pts[2]), x1 = Math.max(r.pts[0], r.pts[2]);
+      const d = Math.abs(part.y - r.pts[1]);
+      if (part.x >= x0 - w / 2 && part.x <= x1 + w / 2 && d < h / 2 + r.t && d < bd) { bd = d; best = r; }
+    }
+    if (!best) return;
+    part.y = best.pts[1];
+    // an Nachbarn auf derselben Schiene andocken, ohne zu überlappen
+    const others = this.sh.parts.filter((o) => o !== part && o.id !== part.id && getSym(o.type)?.kind === 'cab' && Math.abs(o.y - part.y) < 0.01).map(partBox);
+    const tol = Math.max(1.5, 3 / this.view.s);
+    const overlaps = (b) => others.some((ob) => b.x0 < ob.x1 - 0.01 && b.x1 > ob.x0 + 0.01);
+    for (let round = 0; round < 4; round++) {
+      const b = partBox(part);
+      let best = null;
+      for (const ob of others) {
+        const hit = b.x0 < ob.x1 - 0.01 && b.x1 > ob.x0 + 0.01;
+        for (const sh of [ob.x1 - b.x0, ob.x0 - b.x1]) {
+          if (!hit && Math.abs(sh) > tol) continue;
+          const nb = { ...b, x0: b.x0 + sh, x1: b.x1 + sh };
+          if (overlaps(nb)) continue;
+          if (!best || Math.abs(sh) < Math.abs(best)) best = sh;
+        }
+      }
+      if (best == null || Math.abs(best) < 0.001) break;
+      part.x += best;
+    }
+  }
+
+  async deviceEditor(existing) {
+    const inp = (v, ph, type = 'text') => el('input', { class: 'inp', type, value: v ?? '', placeholder: ph || '' });
+    const name = inp(existing?.name, 'z. B. Frequenzumrichter'), w = inp(existing?.cw ?? 45, 'mm', 'number'), h = inp(existing?.ch ?? 90, 'mm', 'number');
+    const prefix = inp(existing?.prefix ?? 'A', 'z. B. T, K, A'), val = inp(existing?.val, 'z. B. 24 V / 5 A, Artikelnummer');
+    let color = existing?.fill || '#eef0f3';
+    const colors = ['#eef0f3', '#d0d4d9', '#3b4048', '#ffffff', '#2f8a46', '#1d4fa0', '#ffd34d', '#e53935', '#c9ccd2', '#009999'];
+    const sw = el('div', { class: 'swatch-row' }, colors.map((c) => { const b = el('button', { class: `cover-sw ${c === color ? 'on' : ''}`, type: 'button', style: { background: c } }); b.addEventListener('click', () => { color = c; sw.querySelectorAll('.on').forEach((x) => x.classList.remove('on')); b.classList.add('on'); }); return b; }));
+    const din = toggle(existing ? !!existing.dinT : true, () => {});
+    const fld = (l, n, hint) => el('div', { class: 'field' }, el('div', { class: 'field-label' }, l), n, hint ? el('div', { class: 'field-hint' }, hint) : null);
+    const buttons = [{ label: 'Abbrechen', value: null }];
+    if (existing) buttons.push({ label: 'Löschen', value: 'del', danger: true });
+    buttons.push({ label: 'Speichern', primary: true, value: () => (name.value.trim() && +w.value > 0 && +h.value > 0 ? 'save' : (toast('Name, Breite und Höhe angeben'), undefined)) });
+    const r = await dialog({
+      title: existing ? 'Gerät bearbeiten' : 'Eigenes Gerät', wide: true,
+      body: el('div', null, el('p', { class: 'muted' }, 'Maße in Millimetern (Frontansicht). 1 TE = 17,5 mm. Das Gerät wird im Planmaßstab gezeichnet und rastet auf Hutschienen ein.'),
+        el('div', { class: 'form-grid' }, fld('Name', name), fld('Kennbuchstabe (BMK)', prefix), fld('Breite (mm)', w), fld('Höhe (mm)', h), fld('Typ / Artikel', val)),
+        fld('Farbe', sw), el('label', { class: 'row-toggle' }, el('span', null, 'Anschlussklemmen oben und unten zeichnen'), din)),
+      buttons,
+    });
+    const list = (getSettings().schCustom || []).filter((c) => c.id !== existing?.id);
+    if (r === 'del') { saveSettings({ schCustom: list }); unregisterCustom(existing.id); registerCustom(this.nb.schSymbols || []); this.fillLib(''); this.draw(); return; }
+    if (r !== 'save') return;
+    const def = { ...cab(name.value.trim(), +w.value, +h.value, prefix.value.trim().replace(/^-/, '').toUpperCase() || 'A', { din: din.checked, fill: color, val: val.value.trim() }), id: existing?.id || 'c_' + uid(), fill: color, dinT: din.checked };
+    delete def.cat;
+    saveSettings({ schCustom: [...list, def] });
+    registerCustom([def]);
+    if ((this.nb.schSymbols || []).some((c) => c.id === def.id)) this.nb.schSymbols = this.nb.schSymbols.map((c) => (c.id === def.id ? def : c));
+    this.fillLib(''); this.saveSoon(); this.draw();
+    toast(`„${def.name}“ gespeichert – unter „Eigene Bauteile“`);
+  }
+
   // ------------------------------------------------------------ Freihand, Wände, Sperren
   inkStyle() { const st = getSettings().schInk || {}; return { c: st.c || '#1f5eff', w: st.w || 0.6 }; }
   setInk(patch) { saveSettings({ schInk: { ...this.inkStyle(), ...patch } }); this.updateCtx(); }
@@ -1301,6 +1473,12 @@ export class SchematicEditor {
   hitWall(x, y, tol) {
     for (let j = this.sh.walls.length - 1; j >= 0; j--) {
       const w = this.sh.walls[j];
+      if (w.kind === 'plate') {
+        const [ax, ay, bx, by] = w.pts;
+        const edges = [[ax, ay, bx, ay], [bx, ay, bx, by], [bx, by, ax, by], [ax, by, ax, ay]];
+        if (edges.some((e) => segDist(x, y, ...e) <= tol)) return w;
+        continue;
+      }
       for (let i = 0; i + 2 < w.pts.length; i += 2) if (segDist(x, y, w.pts[i], w.pts[i + 1], w.pts[i + 2], w.pts[i + 3]) <= tol + (w.t || 2.4) / 2) return w;
     }
     return null;
@@ -1458,6 +1636,7 @@ export class SchematicEditor {
       ref = orphan ? orphan.ref : this.nextRef(sym.prefix);
     } else if (sym.prefix) ref = this.nextRef(sym.prefix);
     const part = { id: uid(), type: this.placeType, x, y, rot: this.placeRot || 0, mir: !!this.placeMir, ref, val: sym.val || '', note: '' };
+    if (sym.kind === 'cab') { part.k = this.cabK; part.x = x; part.y = y; this.dock(part); }
     if (sym.custom) {
       const list = (this.nb.schSymbols || []).filter((c) => c.id !== sym.id);
       const { custom, cat, ...def } = sym;

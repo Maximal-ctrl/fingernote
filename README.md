@@ -24,6 +24,12 @@ Schlicht, modern, offline. Kein Abo, keine Werbung.
   Über 100 Symbole (Umfang wie im Fachkunde-Elektrotechnik-Buch), **eigene Bauteile** im Baukasten,
   Bauteile **sperren** (Schloss), **Lasso**, **Stift & Radierer** zum Hineinzeichnen, Kontaktnummern frei änderbar,
   Schriftfeld per Antippen bearbeiten, 2/3-Finger-Tippen = Rückgängig/Wiederholen
+  **Siemens-SPS** im Stromlaufplan: LOGO! (24 V / 230 V, DM8, AM2), S7-1200 (CPU 1212C/1214C, SM 1221/1222/1231/1232),
+  S7-1500 (CPU 1511, DI/DQ/AI-Baugruppen), SITOP, ET 200SP – mit normgerechten Anschlussnamen (I0.0, Q0.0, 1M, L+, M …)
+- **Schaltschrank-Aufbauplan** (neue Buchart): Montageplatte, **Hutschiene TS35/TS15** (Schlitze nach Norm),
+  **Kabelkanal** 25–80 mm, Geräte in echten Maßen (Maßstab 1:2/1:5/1:10), die auf der Hutschiene einrasten und
+  sich lückenlos an Nachbarn anreihen: LS, FI, Schütze, Motorschutz, Netzteile, Klemmen, LOGO!, S7-1200/1500,
+  ET 200SP, Raspberry Pi, Relaisplatine, Endhalter, Türbauteile … – **eigene Geräte** mit Breite/Höhe selbst anlegen
 - **Installationsplan** (neue Buchart): Wände, Türen, Fenster, Installationssymbole nach DIN EN 60617-11
   (Steckdosen, Aus-/Serien-/Wechsel-/Kreuzschalter, Leuchten, Verteiler, Rauchmelder, LAN/TV/TAE …),
   Leitungen mit Aderzahl und Bezeichnung (z. B. NYM-J 3×1,5), Maßstab im Schriftfeld

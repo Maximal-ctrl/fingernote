@@ -30,7 +30,7 @@ export async function createFolder(name, parent = null, color = '#0d8f80') {
   return f;
 }
 
-export async function createNotebook({ name, parent = null, color = COVER_COLORS[0], template = 'lined', paper = 'white', format = 'portrait', pages = null, mode = 'pages' }) {
+export async function createNotebook({ name, parent = null, color = COVER_COLORS[0], template = 'lined', paper = 'white', format = 'portrait', pages = null, mode = 'pages', cabScale = 5 }) {
   const now = Date.now();
   const sec = newSection(0);
   const nb = {
@@ -38,12 +38,13 @@ export async function createNotebook({ name, parent = null, color = COVER_COLORS
     created: now, updated: now, deleted: null, fav: false,
     defaults: { template, paper, format }, pages: [], thumb: null, idx: [], sections: [sec],
   };
-  const plan = mode === 'schematic' || mode === 'install';
+  const plan = mode === 'schematic' || mode === 'install' || mode === 'cabinet';
   const pageObjs = pages || [newPage(nb.id, { template: plan ? 'blank' : template, paper, format, infinite: mode === 'canvas' })];
   if (plan) {
     nb.schSize = format === 'A3' ? 'A3' : 'A4';
+    if (mode === 'cabinet') nb.cabScale = cabScale || 5;
     nb.schMeta = { project: nb.name, author: '', company: '' };
-    pageObjs.forEach((p, i) => { p.sch = p.sch || { size: nb.schSize, parts: [], wires: [], texts: [], ink: [], walls: [], meta: { title: mode === 'install' ? 'Erdgeschoss' : i ? `Blatt ${i + 1}` : 'Hauptstromkreis', date: new Date().toLocaleDateString('de-DE'), rev: '', scale: mode === 'install' ? '1:50' : '' } }; });
+    pageObjs.forEach((p, i) => { p.sch = p.sch || { size: nb.schSize, parts: [], wires: [], texts: [], ink: [], walls: [], meta: { title: mode === 'install' ? 'Erdgeschoss' : mode === 'cabinet' ? 'Montageplatte' : i ? `Blatt ${i + 1}` : 'Hauptstromkreis', date: new Date().toLocaleDateString('de-DE'), rev: '', scale: mode === 'install' ? '1:50' : mode === 'cabinet' ? `1:${nb.cabScale}` : '' } }; });
   }
   for (const p of pageObjs) { p.nb = nb.id; p.sec = sec.id; }
   nb.pages = pageObjs.map((p) => p.id);

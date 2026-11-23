@@ -85,6 +85,9 @@ const P = {
   flip: '<path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 6L4 18h5zM15 6l5 12h-5z"/>',
   checkCircle: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/>',
   circuit: '<path d="M3 12h4l2-5 3 10 2-5h7"/><circle cx="3" cy="12" r="1"/><circle cx="21" cy="12" r="1"/>',
+  rail: '<rect x="2" y="8" width="20" height="8" rx="1"/><path d="M2 10h20M2 14h20"/><path d="M6 12h2M11 12h2M16 12h2"/>',
+  duct: '<rect x="2" y="7" width="20" height="10" rx="1"/><path d="M5 7v2.5M8 7v2.5M11 7v2.5M14 7v2.5M17 7v2.5M20 7v2.5M5 17v-2.5M8 17v-2.5M11 17v-2.5M14 17v-2.5M17 17v-2.5M20 17v-2.5"/>',
+  cabinet: '<rect x="4" y="2" width="16" height="20" rx="1.5"/><path d="M4 8h16M4 14h16"/><path d="M7 5h3M7 11h2M12 11h2M7 17h5"/>',
   rotate: '<path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
 };
 

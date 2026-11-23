@@ -111,7 +111,7 @@ class App {
 
   async openNotebook(id, pageId) {
     const item = await store.getItem(id);
-    if (item && (item.mode === 'schematic' || item.mode === 'install')) {
+    if (item && ['schematic', 'install', 'cabinet'].includes(item.mode)) {
       this.libEl.hidden = true;
       const ok = await this.sch.open(id, pageId);
       if (!ok) { this.libEl.hidden = false; return false; }

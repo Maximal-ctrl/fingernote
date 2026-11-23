@@ -200,7 +200,7 @@ export class Library {
   /** Fehlende Vorschaubilder im Hintergrund erzeugen. */
   async fillThumbs(list) {
     for (const nb of list) {
-      if (nb.kind !== 'notebook' || nb.thumb || nb.deleted || nb.mode === 'schematic' || nb.mode === 'install') continue;
+      if (nb.kind !== 'notebook' || nb.thumb || nb.deleted || ['schematic', 'install', 'cabinet'].includes(nb.mode)) continue;
       try {
         const data = await store.loadNotebook(nb.id);
         if (!data) continue;
@@ -271,11 +271,11 @@ export class Library {
     if (nb.thumb) cover.append(el('img', { src: nb.thumb, alt: '', draggable: 'false' }));
     else cover.append(el('div', { class: 'cover-blank' }));
     cover.append(el('span', { class: 'spine' }),
-      el('span', { class: 'mode-badge', html: icon(nb.mode === 'canvas' ? 'canvas' : nb.mode === 'schematic' ? 'circuit' : nb.mode === 'install' ? 'layout' : 'pages') + `<span>${nb.mode === 'canvas' ? 'Leinwand' : nb.mode === 'schematic' ? 'Stromlaufplan' : nb.mode === 'install' ? 'Installationsplan' : 'Seiten'}</span>` }));
+      el('span', { class: 'mode-badge', html: icon({ canvas: 'canvas', schematic: 'circuit', install: 'layout', cabinet: 'cabinet' }[nb.mode] || 'pages') + `<span>${{ canvas: 'Leinwand', schematic: 'Stromlaufplan', install: 'Installationsplan', cabinet: 'Aufbauplan' }[nb.mode] || 'Seiten'}</span>` }));
     const n = (nb.pages || []).length;
     const ns = (nb.sections || []).length;
     const sub = this.tab === 'trash' ? `gelöscht ${relTime(nb.deleted)}` :
-      `${relTime(nb.updated)} · ${nb.mode === 'canvas' ? (ns > 1 ? `${ns} Leinwände` : 'Leinwand') : nb.mode === 'schematic' || nb.mode === 'install' ? `${n} Blatt` : `${n} ${n === 1 ? 'Seite' : 'Seiten'}`}`;
+      `${relTime(nb.updated)} · ${nb.mode === 'canvas' ? (ns > 1 ? `${ns} Leinwände` : 'Leinwand') : ['schematic', 'install', 'cabinet'].includes(nb.mode) ? `${n} Blatt` : `${n} ${n === 1 ? 'Seite' : 'Seiten'}`}`;
     const card = el('div', { class: 'card nb', tabindex: '0', dataset: { id: nb.id } }, cover,
       el('div', { class: 'card-meta' },
         el('div', { class: 'card-name' }, nb.fav ? el('span', { class: 'fav', html: icon('star2') }) : null, nb.name),
@@ -434,9 +434,17 @@ export class Library {
       return b;
     }));
     const schField = field('Blattgröße', schSize, 'Mit Rahmen, Spalteneinteilung für Querverweise und Schriftfeld.');
+    const cabScale = el('div', { class: 'seg' }, [2, 5, 10].map((k) => {
+      const b = el('button', { type: 'button', class: (o.cabScale || 5) === k ? 'on' : '' }, `1:${k}`);
+      b.addEventListener('click', () => { o.cabScale = k; cabScale.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); });
+      return b;
+    }));
+    const cabField = field('Maßstab', cabScale, '1:5 passt für Schaltschränke bis ca. 1000 × 800 mm auf A4.');
     const drawTpl = () => {
-      tplBox.hidden = o.mode === 'schematic' || o.mode === 'install';
-      schField.hidden = o.mode !== 'schematic' && o.mode !== 'install';
+      const plan = ['schematic', 'install', 'cabinet'].includes(o.mode);
+      tplBox.hidden = plan;
+      schField.hidden = !plan;
+      cabField.hidden = o.mode !== 'cabinet';
       const allowed = o.mode === 'canvas' ? ['blank', 'lined', 'grid', 'dots'] : null;
       if (allowed && !allowed.includes(o.template)) o.template = 'dots';
       const tpl = templatePicker(o.template, o.paper, (v) => { o.template = v; }, allowed);
@@ -453,7 +461,8 @@ export class Library {
       modeCard('pages', 'pages', 'Buch mit Seiten', 'Wie ein Heft – Seite für Seite, auch PDFs'),
       modeCard('canvas', 'canvas', 'Unendliche Leinwand', 'Grenzenlos in alle Richtungen – für Mindmaps & Skizzen'),
       modeCard('schematic', 'circuit', 'Stromlaufplan', 'Schaltplan nach IEC 60617 – mit BMK, Kontaktspiegel & Stückliste'),
-      modeCard('install', 'layout', 'Installationsplan', 'Grundriss mit Wänden, Steckdosen, Schaltern, Leuchten & Leitungen'));
+      modeCard('install', 'layout', 'Installationsplan', 'Grundriss mit Wänden, Steckdosen, Schaltern, Leuchten & Leitungen'),
+      modeCard('cabinet', 'cabinet', 'Schaltschrank-Aufbauplan', 'Montageplatte, Hutschienen, Kabelkanäle & Geräte im Maßstab'));
     const whereBtn = el('button', { class: 'where-btn', type: 'button' });
     const drawWhere = () => { const f = o.parent && this.get(o.parent); whereBtn.innerHTML = icon(f ? 'folder' : 'network') + '<span></span>' + icon('chevronDown'); whereBtn.querySelector('span').textContent = f ? f.name : 'Meine Welt'; };
     whereBtn.addEventListener('click', async () => {
@@ -467,7 +476,7 @@ export class Library {
     const body = el('div', { class: 'new-nb' },
       field('Name', name), modes,
       el('div', { class: 'field-row' }, field('Farbe', colorRow(store.COVER_COLORS, o.color, (v) => { o.color = v; })), field('Ort', whereBtn)),
-      tplBox, fmtField, schField);
+      tplBox, fmtField, schField, cabField);
     const r = await dialog({
       title: 'Neues Buch', body, wide: true,
       buttons: [{ label: 'Abbrechen', value: null }, { label: 'Erstellen', value: true, primary: true }],
@@ -476,7 +485,7 @@ export class Library {
     if (!r) return;
     const nm = name.value.trim() || `Buch ${new Date().toLocaleDateString('de-DE')}`;
     saveSettings({ lastNew: { color: o.color, template: o.template, paper: o.paper, format: o.format, mode: o.mode } });
-    const nb = await store.createNotebook({ ...o, name: nm, format: o.mode === 'schematic' || o.mode === 'install' ? (o.schSize || 'A4') : o.format });
+    const nb = await store.createNotebook({ ...o, name: nm, format: ['schematic', 'install', 'cabinet'].includes(o.mode) ? (o.schSize || 'A4') : o.format, cabScale: o.cabScale || 5 });
     await this.app.openNotebook(nb.id);
   }
 
@@ -514,7 +523,7 @@ export class Library {
   }
 
   async exportPdf(nb) {
-    if (nb.mode === 'schematic' || nb.mode === 'install') { await this.app.openNotebook(nb.id); this.app.sch.exportPdf(); return; }
+    if (['schematic', 'install', 'cabinet'].includes(nb.mode)) { await this.app.openNotebook(nb.id); this.app.sch.exportPdf(); return; }
     const prog = progress('PDF wird erstellt');
     try {
       const data = await store.loadNotebook(nb.id);
