@@ -604,5 +604,21 @@ select.inp { -webkit-appearance: none; appearance: none; }
 .issue-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
 .issue.ok { color: var(--ok); font-weight: 600; }
 .issue.ok .ic { width: 20px; height: 20px; }
-.mode-cards { grid-template-columns: repeat(3, 1fr); }
+.mode-cards { grid-template-columns: repeat(2, 1fr); }
 @media (max-width: 680px) { .sch-lib { width: auto; right: 12px; } }
+
+/* Stromlaufplan 2.2 */
+.sym-tile { position: relative; }
+.sym-tile.add { justify-content: center; color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px dashed var(--accent); }
+.sym-tile.add .ic { width: 26px; height: 26px; }
+.sym-edit { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center; background: var(--surface-2); color: var(--text-2); }
+.sym-edit .ic { width: 14px; height: 14px; }
+.ctx-btn.on { background: var(--accent-soft); color: var(--accent); }
+.pin-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.pin-cell { display: flex; flex-direction: column; gap: 3px; width: 88px; font-size: 11.5px; color: var(--text-2); }
+.pin-inp { height: 38px; text-align: center; font-weight: 600; }
+.symed { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.symed-bar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.symed-canvas { max-width: 100%; height: auto !important; border-radius: 12px; box-shadow: 0 0 0 1px var(--line-strong); touch-action: none; background: #fff; }
+.symed .form-grid { width: 100%; }
+#schematic .flash { position: absolute; z-index: 7; }

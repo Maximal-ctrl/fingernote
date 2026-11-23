@@ -1,6 +1,6 @@
 // Kleine Hilfsfunktionen, die überall gebraucht werden.
 
-export const APP_VERSION = '2.1';
+export const APP_VERSION = '2.2';
 
 export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);

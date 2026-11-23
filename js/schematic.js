@@ -1,9 +1,9 @@
 // Stromlaufplan-Editor: Blätter mit Schriftfeld, Bauteile nach IEC 60617, Verdrahtung im Raster,
 // automatische BMK, Kontaktspiegel & Querverweise, Prüfung, Stückliste, Netzliste, PDF/SVG/PNG.
-import { el, uid, clamp, debounce, safeFileName, dateStamp } from './util.js';
+import { el, uid, clamp, debounce, safeFileName, dateStamp, getSettings, saveSettings } from './util.js';
 import { icon } from './icons.js';
 import { toast, dialog, menu, prompt, confirm, progress, closePopover, toggle } from './ui.js';
-import { SYMBOLS, CATEGORIES, xf, partPins, partBox, isVertical, drawSymbol } from './schem-symbols.js';
+import { SYMBOLS, CATEGORIES, INSTALL_CATEGORIES, xf, partPins, partBox, isVertical, drawSymbol, getSym, registerCustom, unregisterCustom, allSymbols } from './schem-symbols.js';
 import * as store from './store.js';
 import { buildPdf } from './pdfio.js';
 import { offerFile } from './editor-ui.js';
@@ -16,10 +16,19 @@ const SEL = '#6a5cff';
 const FRAME = '#16161a';
 
 export function newSheetData(size = 'A4', title = 'Blatt 1') {
-  return { size, parts: [], wires: [], texts: [], meta: { title, date: new Date().toLocaleDateString('de-DE'), rev: '' } };
+  return { size, parts: [], wires: [], texts: [], ink: [], walls: [], meta: { title, date: new Date().toLocaleDateString('de-DE'), rev: '' } };
 }
 
 const snap = (v, g = GRID) => Math.round(v / g) * g;
+const round1 = (v) => Math.round(v * 10) / 10;
+function pointInPoly(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 2; i < poly.length; j = i, i += 2) {
+    const xi = poly[i], yi = poly[i + 1], xj = poly[j], yj = poly[j + 1];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
 const key = (x, y) => `${Math.round(x * 100)},${Math.round(y * 100)}`;
 const same = (ax, ay, bx, by) => Math.abs(ax - bx) < 0.01 && Math.abs(ay - by) < 0.01;
 const onSeg = (px, py, ax, ay, bx, by) => {
@@ -90,7 +99,7 @@ class CanvasPen {
     for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]);
     if (close) c.closePath();
     if (fill) { c.fillStyle = fill; c.fill(); }
-    if (stroke) { c.strokeStyle = stroke; c.lineWidth = lw || this.lw; c.stroke(); }
+    if (stroke) { c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = stroke; c.lineWidth = lw || this.lw; c.stroke(); }
   }
   circle(cx, cy, r, fill, stroke) {
     const c = this.ctx;
@@ -113,7 +122,7 @@ class SvgPen {
   line(x1, y1, x2, y2, color, dash) { this.out.push(`<line x1="${this.f(x1)}" y1="${this.f(y1)}" x2="${this.f(x2)}" y2="${this.f(y2)}" stroke="${color}" stroke-width="${LW}"${dash ? ' stroke-dasharray="1.2 1"' : ''}/>`); }
   poly(pts, close, fill, stroke, lw) {
     const p = []; for (let i = 0; i < pts.length; i += 2) p.push(`${this.f(pts[i])},${this.f(pts[i + 1])}`);
-    this.out.push(`<${close ? 'polygon' : 'polyline'} points="${p.join(' ')}" fill="${fill || 'none'}" stroke="${stroke || 'none'}" stroke-width="${lw || LW}" stroke-linejoin="round"/>`);
+    this.out.push(`<${close ? 'polygon' : 'polyline'} points="${p.join(' ')}" fill="${fill || 'none'}" stroke="${stroke || 'none'}" stroke-width="${lw || LW}" stroke-linejoin="round" stroke-linecap="round"/>`);
   }
   circle(cx, cy, r, fill, stroke) { this.out.push(`<circle cx="${this.f(cx)}" cy="${this.f(cy)}" r="${this.f(r)}" fill="${fill || 'none'}" stroke="${stroke || 'none'}" stroke-width="${LW}"/>`); }
   text(x, y, s, size, align, color, base = 'alphabetic', bold) {
@@ -153,7 +162,7 @@ export function analyze(sheets) {
       }
     }
     for (const part of sh.parts) {
-      const sym = SYMBOLS[part.type];
+      const sym = getSym(part.type);
       if (!sym) continue;
       for (const pin of partPins(part)) {
         const node = `pin:${part.id}:${pin.i}`;
@@ -208,7 +217,7 @@ export function analyze(sheets) {
   let auto = 0;
   const nets = [];
   for (const [r, list] of groups) {
-    const real = list.filter((q) => !['net', 'gnd'].includes(SYMBOLS[q.part.type].kind));
+    const real = list.filter((q) => !['net', 'gnd'].includes(getSym(q.part.type).kind));
     if (!real.length) continue;
     const name = netName.get(r) || `N${++auto}`;
     nets.push({ name, pins: real });
@@ -226,7 +235,7 @@ export function analyze(sheets) {
   const contacts = new Map();
   sheets.forEach((sh, s) => {
     for (const part of sh.parts) {
-      const sym = SYMBOLS[part.type];
+      const sym = getSym(part.type);
       const ref = (part.ref || '').trim();
       if (!sym || !ref) continue;
       if (sym.kind === 'coil') coils.set(ref, { s, part, loc: loc(s, part) });
@@ -249,21 +258,30 @@ export function analyze(sheets) {
       if (coil) {
         xref.set(c.part.id, coil.loc);
         if (!mirror.has(coil.part.id)) mirror.set(coil.part.id, []);
-        mirror.get(coil.part.id).push({ label: labels.join('-'), loc: c.loc, kind: c.kind });
+        mirror.get(coil.part.id).push({ label: labels.join('-'), loc: c.loc, kind: c.kind, part: c.part });
       }
     });
   }
   for (const [, c] of coils) pinLabels.set(c.part.id, ['A1', 'A2']);
+  // Eigene Anschlussbezeichnungen (z. B. geänderte Kontaktnummern) haben Vorrang
+  for (const sh of sheets) for (const part of sh.parts) {
+    if (!Array.isArray(part.pl) || !part.pl.some(Boolean)) continue;
+    const auto = pinLabels.get(part.id) || [];
+    pinLabels.set(part.id, partPins(part).map((pin, i) => part.pl[i] || auto[i] || ''));
+  }
+  // Kontaktspiegel mit den tatsächlichen Nummern
+  for (const [, list] of mirror) for (const e of list) if (e.part) e.label = (pinLabels.get(e.part.id) || []).filter(Boolean).join('-');
 
   // Prüfung
   const issues = [];
   const refCount = new Map();
   sheets.forEach((sh, s) => {
     for (const part of sh.parts) {
-      const sym = SYMBOLS[part.type];
+      const sym = getSym(part.type);
       if (!sym) continue;
       const ref = (part.ref || '').trim();
-      if (sym.kind !== 'net' && sym.kind !== 'gnd') {
+      const quiet = sym.kind === 'deco' || String(sym.cat).startsWith('Installation');
+      if (sym.kind !== 'net' && sym.kind !== 'gnd' && !quiet) {
         if (!ref) issues.push({ s, part, text: `${sym.name} ohne Betriebsmittelkennzeichen (BMK)` });
         else if (!['no', 'nc', 'co'].includes(sym.kind)) {
           const k = ref.toLowerCase();
@@ -277,7 +295,7 @@ export function analyze(sheets) {
     }
   });
   for (const pi of pinInfo) {
-    if (!pi.connected && !['net', 'gnd'].includes(SYMBOLS[pi.part.type].kind)) issues.push({ s: pi.s, part: pi.part, text: `${pi.part.ref || SYMBOLS[pi.part.type].name}: Anschluss ${pinLabels.get(pi.part.id)?.[pi.pin.i] || pi.pin.name || pi.pin.i + 1} ist nicht verbunden` });
+    if (!pi.connected && !['net', 'gnd'].includes(getSym(pi.part.type).kind) && !String(getSym(pi.part.type).cat).startsWith('Installation')) issues.push({ s: pi.s, part: pi.part, text: `${pi.part.ref || getSym(pi.part.type).name}: Anschluss ${pinLabels.get(pi.part.id)?.[pi.pin.i] || pi.pin.name || pi.pin.i + 1} ist nicht verbunden` });
   }
   dangling.forEach((list, s) => list.forEach(([x, y]) => issues.push({ s, at: [x, y], text: 'Offenes Leitungsende' })));
   return { junctions, nets, pinLabels, mirror, xref, issues, loc };
@@ -309,18 +327,38 @@ export function renderSheet(pen, sheets, idx, A, meta = {}, opt = {}) {
   lab(tx + 81.5, ty + 2.2, 'Zeichner'); pen.text(tx + 81.5, ty + 4.8, meta.author || '', 2.4, 'left', INK);
   lab(tx + 81.5, ty + 7.7, 'Datum'); pen.text(tx + 81.5, ty + 10.3, sh.meta.date || '', 2.4, 'left', INK);
   lab(tx + 81.5, ty + 13.2, 'Firma / Schule'); pen.text(tx + 81.5, ty + 15.8, meta.company || '', 2.4, 'left', INK);
-  lab(tx + 81.5, ty + 18.7, 'Blatt'); pen.text(tx + 81.5, ty + 21.3, `${idx + 1} von ${sheets.length}${sh.meta.rev ? '   Rev. ' + sh.meta.rev : ''}`, 2.4, 'left', INK);
+  lab(tx + 81.5, ty + 18.7, 'Blatt'); pen.text(tx + 81.5, ty + 21.3, `${idx + 1} von ${sheets.length}${sh.meta.rev ? '   Rev. ' + sh.meta.rev : ''}${sh.meta.scale ? '   M ' + sh.meta.scale : ''}`, 2.4, 'left', INK);
+
+  // Wände (Installationsplan)
+  for (const w of sh.walls || []) {
+    const c = sel && sel.walls && sel.walls.has(w.id) ? SEL : '#55555e';
+    pen.poly(w.pts, false, null, c, w.t || 2.4);
+  }
 
   // Leitungen
   for (const w of sh.wires) {
     const c = sel && sel.wires.has(w.id) ? SEL : INK;
     pen.poly(w.pts, false, null, c);
+    // Aderzahl (Schrägstriche) und Leitungsbezeichnung am längsten Abschnitt
+    if (w.n || w.label) {
+      let best = 0, bl = -1;
+      for (let i = 0; i + 2 < w.pts.length; i += 2) { const l = Math.hypot(w.pts[i + 2] - w.pts[i], w.pts[i + 3] - w.pts[i + 1]); if (l > bl) { bl = l; best = i; } }
+      const ax = w.pts[best], ay = w.pts[best + 1], bx = w.pts[best + 2], by = w.pts[best + 3];
+      const mx = (ax + bx) / 2, my = (ay + by) / 2, horiz = Math.abs(ay - by) < 0.01;
+      const n = Math.min(w.n || 0, 7);
+      for (let k = 0; k < n; k++) {
+        const o = (k - (n - 1) / 2) * 1.4;
+        if (horiz) pen.line(mx + o - 0.9, my + 1.6, mx + o + 0.9, my - 1.6, c);
+        else pen.line(mx - 1.6, my + o + 0.9, mx + 1.6, my + o - 0.9, c);
+      }
+      if (w.label) pen.text(horiz ? mx : mx + 2.4, horiz ? my - 2.6 : my + 1, w.label, 2.2, horiz ? 'center' : 'left', c);
+    }
   }
   for (const [x, y] of A.junctions[idx] || []) pen.circle(x, y, 0.75, INK, null);
 
   // Bauteile
   for (const part of sh.parts) {
-    const sym = SYMBOLS[part.type];
+    const sym = getSym(part.type);
     if (!sym) continue;
     const isSel = sel && sel.parts.has(part.id);
     const c = isSel ? SEL : INK;
@@ -332,7 +370,17 @@ export function renderSheet(pen, sheets, idx, A, meta = {}, opt = {}) {
       pen.text(pins[0].x + (right ? 1.6 : -1.6), pins[0].y - 1, part.ref || '?', 3, right ? 'left' : 'right', c, 'alphabetic', true);
       continue;
     }
-    if (sym.kind === 'gnd') continue;
+    if (opt.edit && part.lock) {
+      // kleines Schloss
+      const lx = box.x1 + 0.5, ly = box.y0 - 0.5;
+      pen.poly([lx - 1.2, ly, lx + 1.2, ly, lx + 1.2, ly + 1.8, lx - 1.2, ly + 1.8], true, '#9a9aa3', null);
+      pen.poly([lx - 0.75, ly, lx - 0.75, ly - 0.9, lx + 0.75, ly - 0.9, lx + 0.75, ly], false, null, '#9a9aa3');
+    }
+    if (sym.kind === 'gnd' || sym.kind === 'deco') continue;
+    if (String(sym.cat).startsWith('Installation') && !part.showRef) {
+      if (part.val) pen.text(box.x1 + 1, box.y0 - 0.6, part.val, 2.2, 'left', c);
+      continue;
+    }
     const vert = isVertical(part);
     const lines = [];
     if (part.ref) lines.push([part.ref, true]);
@@ -341,7 +389,7 @@ export function renderSheet(pen, sheets, idx, A, meta = {}, opt = {}) {
     if (xr) lines.push([`/${xr}`, false]);
     if (vert) {
       let y = (box.y0 + box.y1) / 2 - (lines.length - 1) * 1.7 + 1;
-      for (const [t, b] of lines) { pen.text(box.x1 + 1.8, y, t, b ? 3 : 2.5, 'left', c, 'alphabetic', b); y += 3.4; }
+      for (const [t, b] of lines) { pen.text(box.x0 - 1.8, y, t, b ? 3 : 2.5, 'right', c, 'alphabetic', b); y += 3.4; }
     } else {
       let y = box.y0 - 1.6 - (lines.length - 1) * 3.2;
       for (const [t, b] of lines) { pen.text((box.x0 + box.x1) / 2, y, t, b ? 3 : 2.5, 'center', c, 'alphabetic', b); y += 3.2; }
@@ -352,14 +400,14 @@ export function renderSheet(pen, sheets, idx, A, meta = {}, opt = {}) {
       partPins(part).forEach((pin, i) => {
         if (!pl[i]) return;
         const up = pin.y < part.y;
-        pen.text(pin.x - 1, pin.y + (up ? 3 : -1.2), pl[i], 1.9, 'right', '#6c6c75');
+        pen.text(pin.x + 1, pin.y + (up ? 3 : -1.2), pl[i], 1.9, 'left', '#6c6c75');
       });
     }
     // Kontaktspiegel unter der Spule
     const m = A.mirror.get(part.id);
     if (m) {
       let y = box.y1 + 4 + (vert ? 4 : 0);
-      const x = vert ? box.x1 + 1.8 : box.x0;
+      const x = vert ? box.x0 - 1.8 - 18 : box.x0;
       for (const e of m) {
         pen.text(x, y, `${e.kind === 'no' ? '⊸' : e.kind === 'nc' ? '⊷' : '⇋'} ${e.label}  /${e.loc}`, 2.2, 'left', '#4b4b55');
         y += 2.8;
@@ -371,7 +419,18 @@ export function renderSheet(pen, sheets, idx, A, meta = {}, opt = {}) {
     const c = sel && sel.texts.has(t.id) ? SEL : INK;
     String(t.text).split('\n').forEach((ln, i) => pen.text(t.x, t.y + i * t.size * 1.25, ln, t.size, 'left', c));
   }
+  for (const k of sh.ink || []) {
+    const c = sel && sel.ink && sel.ink.has(k.id) ? SEL : k.c || '#1f5eff';
+    if (k.pts.length === 2) pen.circle(k.pts[0], k.pts[1], (k.w || 0.5) / 2, c, null);
+    else pen.poly(k.pts, false, null, c, k.w || 0.5);
+  }
   if (hover) pen.circle(hover[0], hover[1], 1.3, null, SEL);
+}
+
+/** Position des Schriftfelds (zum Antippen). */
+export function titleRect(sh) {
+  const S = SHEET_SIZES[sh.size] || SHEET_SIZES.A4;
+  return { x0: S.w - 5 - 130, y0: S.h - 5 - 22, x1: S.w - 5, y1: S.h - 5 };
 }
 
 // ---------------------------------------------------------------- Editor
@@ -414,18 +473,7 @@ export class SchematicEditor {
               <button class="chapter-chip" data-a="sheets"><span class="dot"></span><span class="cn"></span>${icon('chevronDown')}</button>
             </div>
           </div>
-          <div class="float-bar glass ed-tools" role="toolbar">
-            <button class="tb" data-tool="select" title="Auswählen & verschieben (V)">${icon('cursor')}</button>
-            <button class="tb" data-tool="wire" title="Verdrahten (W)">${icon('wire')}</button>
-            <button class="tb" data-tool="text" title="Text (T)">${icon('text')}</button>
-            <button class="tb" data-a="netlabel" title="Potential setzen (L1, N, PE, +24V …)">${icon('tag')}</button>
-            <span class="tb-sep"></span>
-            <button class="tb" data-a="rotate" title="Drehen (R)">${icon('rotate')}</button>
-            <button class="tb" data-a="mirror" title="Spiegeln (X)">${icon('flip')}</button>
-            <button class="tb" data-a="delete" title="Löschen (Entf)">${icon('trash')}</button>
-            <span class="tb-sep"></span>
-            <button class="tb" data-a="check" title="Plan prüfen">${icon('checkCircle')}</button>
-          </div>
+          <div class="float-bar glass ed-tools" role="toolbar"></div>
           <div class="float-bar glass ed-right">
             <button class="ib" data-a="undo" title="Rückgängig">${icon('undo')}</button>
             <button class="ib" data-a="redo" title="Wiederholen">${icon('redo')}</button>
@@ -437,6 +485,7 @@ export class SchematicEditor {
         <div class="ed-ctx"><div class="float-bar glass ctx-inner"></div></div>
       </div>
       <button class="pg-ind glass" data-a="sheets"></button>`;
+    this.toolsEl = r.querySelector('.ed-tools');
     this.canvas = r.querySelector('.sch-canvas');
     this.ctx = this.canvas.getContext('2d');
     this.ctxInner = r.querySelector('.ctx-inner');
@@ -464,13 +513,54 @@ export class SchematicEditor {
     this.fillLib('');
   }
 
+  buildTools() {
+    const inst = this.kind === 'install';
+    const T = (k, ic, t) => `<button class="tb" data-tool="${k}" title="${t}" aria-label="${t}">${icon(ic)}</button>`;
+    const A = (k, ic, t) => `<button class="tb" data-a="${k}" title="${t}" aria-label="${t}">${icon(ic)}</button>`;
+    this.toolsEl.innerHTML = [
+      T('select', 'cursor', 'Auswählen & verschieben (V)'),
+      T('lasso', 'lasso', 'Lasso-Auswahl (L)'),
+      T('wire', 'wire', inst ? 'Leitung ziehen (W)' : 'Verdrahten (W)'),
+      inst ? T('wall', 'layout', 'Wand zeichnen') : A('netlabel', 'tag', 'Potential setzen (L1, N, PE, +24V …)'),
+      T('draw', 'pen', 'Stift – frei zeichnen (P)'),
+      T('erase', 'eraser', 'Radierer für Freihand (E)'),
+      T('text', 'text', 'Text (T)'),
+      '<span class="tb-sep"></span>',
+      A('rotate', 'rotate', 'Drehen (R)'),
+      A('mirror', 'flip', 'Spiegeln (X)'),
+      A('lock', 'lock', 'Sperren / Entsperren'),
+      A('delete', 'trash', 'Löschen (Entf)'),
+      '<span class="tb-sep"></span>',
+      A('check', 'checkCircle', 'Plan prüfen'),
+    ].join('');
+  }
+
   fillLib(q) {
     const list = this.libList;
     list.innerHTML = '';
     const s = q.trim().toLowerCase();
     const syn = { schütz: 'relais spule kontakt', lampe: 'leuchte', erde: 'masse pe schutzleiter', taster: 'taster', klemme: 'klemme', quelle: 'batterie spannung' };
-    for (const cat of CATEGORIES) {
-      const items = Object.entries(SYMBOLS).filter(([k, v]) => v.cat === cat && (!s || `${v.name} ${v.prefix} ${k} ${cat}`.toLowerCase().includes(s) || Object.entries(syn).some(([a, b]) => s.includes(a) && b.split(' ').some((w) => v.name.toLowerCase().includes(w)))));
+    const cats = this.kind === 'install' ? INSTALL_CATEGORIES : CATEGORIES;
+    for (const cat of cats) {
+      if (cat === 'Eigene Bauteile' && !s) {
+        // eigene Bauteile + Baukasten
+        list.append(el('div', { class: 'nav-h' }, cat));
+        const grid = el('div', { class: 'sym-grid' });
+        const add = el('button', { class: 'sym-tile add', title: 'Eigenes Bauteil erstellen', html: `${icon('plus')}<span>Neues Bauteil</span>` });
+        add.addEventListener('click', () => this.symbolEditor());
+        grid.append(add);
+        for (const [k, v] of Object.entries(allSymbols()).filter(([, v]) => v.custom)) {
+          const b = el('button', { class: `sym-tile ${this.placeType === k && this.tool === 'place' ? 'on' : ''}`, title: v.name }, symbolPreview(k), el('span', null, v.name));
+          b.addEventListener('click', () => this.startPlace(k));
+          const ed = el('button', { class: 'sym-edit', 'aria-label': 'Bearbeiten', html: icon('pencil') });
+          ed.addEventListener('click', (e) => { e.stopPropagation(); this.symbolEditor(v); });
+          b.append(ed);
+          grid.append(b);
+        }
+        list.append(grid);
+        continue;
+      }
+      const items = Object.entries(allSymbols()).filter(([k, v]) => v.cat === cat && (!s || `${v.name} ${v.prefix} ${k} ${cat}`.toLowerCase().includes(s) || Object.entries(syn).some(([a, b]) => s.includes(a) && b.split(' ').some((w) => v.name.toLowerCase().includes(w)))));
       if (!items.length) continue;
       list.append(el('div', { class: 'nav-h' }, cat));
       const grid = el('div', { class: 'sym-grid' });
@@ -492,6 +582,12 @@ export class SchematicEditor {
     this.pages = data.pages;
     for (const p of this.pages) if (!p.sch) p.sch = newSheetData(this.nb.schSize || 'A4', 'Blatt');
     this.nb.schMeta = this.nb.schMeta || { project: this.nb.name, author: '', company: '' };
+    this.kind = this.nb.mode === 'install' ? 'install' : 'schematic';
+    for (const p of this.pages) { p.sch.ink = p.sch.ink || []; p.sch.walls = p.sch.walls || []; }
+    // eigene Bauteile: Bibliothek des Kontos + im Plan gespeicherte Kopien
+    registerCustom(getSettings().schCustom || []);
+    registerCustom(this.nb.schSymbols || []);
+    this.buildTools();
     this.idx = Math.max(0, this.pages.findIndex((p) => p.id === pageId));
     this.isOpen = true;
     this.root.hidden = false;
@@ -531,7 +627,7 @@ export class SchematicEditor {
     const nb = this.nb;
     nb.pages = this.pages.map((p) => p.id);
     nb.updated = Date.now();
-    nb.idx = this.pages.map((p) => [p.id, [p.sch.meta.title, ...p.sch.parts.map((x) => `${x.ref || ''} ${x.val || ''} ${x.note || ''} ${SYMBOLS[x.type]?.name || ''}`), ...p.sch.texts.map((t) => t.text)].join('\n')]);
+    nb.idx = this.pages.map((p) => [p.id, [p.sch.meta.title, ...p.sch.parts.map((x) => `${x.ref || ''} ${x.val || ''} ${x.note || ''} ${getSym(x.type)?.name || ''}`), ...p.sch.texts.map((t) => t.text)].join('\n')]);
     this.setSave('saving');
     try {
       await store.savePages(nb, this.pages, this.removed || []);
@@ -628,7 +724,7 @@ export class SchematicEditor {
       for (let y = Math.max(GRID, snap(wy0)); y <= Math.min(S.h - GRID, wy1); y += GRID) for (let x = Math.max(GRID, snap(wx0)); x <= Math.min(S.w - GRID, wx1); x += GRID) c.fillRect(x - r / 2, y - r / 2, r, r);
     }
     const pen = new CanvasPen(c, 1 / v.s);
-    renderSheet(pen, this.sheets(), this.idx, this.analysis(), this.nb.schMeta, { sel: this.sel, hover: this.hover });
+    renderSheet(pen, this.sheets(), this.idx, this.analysis(), this.nb.schMeta, { sel: this.sel, hover: this.hover, edit: true });
     // Vorschau: Bauteil platzieren
     if (this.tool === 'place' && this.ghostAt) {
       c.globalAlpha = 0.55;
@@ -638,9 +734,31 @@ export class SchematicEditor {
     // Vorschau: Leitung
     if (this.draft) {
       const p = this.draftPts();
-      if (p.length >= 4) pen.poly(p, false, null, SEL, Math.max(0.5, 2 / v.s));
+      if (p.length >= 4) pen.poly(p, false, null, this.draft.wall ? 'rgba(85,85,94,.6)' : SEL, this.draft.wall ? (this.wallT || 4.8) : Math.max(0.5, 2 / v.s));
       c.fillStyle = SEL;
       for (let i = 0; i < p.length; i += 2) { c.beginPath(); c.arc(p[i], p[i + 1], Math.max(0.5, 2.5 / v.s), 0, 7); c.fill(); }
+    }
+    // Freihand in Arbeit
+    if (this.inkDraft) {
+      const k = this.inkDraft;
+      if (k.pts.length === 2) pen.circle(k.pts[0], k.pts[1], k.w / 2, k.c, null); else pen.poly(k.pts, false, null, k.c, k.w);
+    }
+    // Radierer-Kreis
+    if (this.tool === 'erase' && this.eraserAt && this.drag) {
+      c.strokeStyle = 'rgba(90,90,90,.7)'; c.lineWidth = 1 / v.s;
+      c.beginPath(); c.arc(this.eraserAt[0], this.eraserAt[1], this.eraserAt[2], 0, 7); c.stroke();
+    }
+    // Lasso
+    if (this.lassoPts && this.lassoPts.length >= 4) {
+      const L = this.lassoPts;
+      c.beginPath(); c.moveTo(L[0], L[1]); for (let i = 2; i < L.length; i += 2) c.lineTo(L[i], L[i + 1]); c.closePath();
+      c.fillStyle = 'rgba(106,92,255,.08)'; c.fill();
+      c.setLineDash([2 / v.s, 2 / v.s]); c.strokeStyle = SEL; c.lineWidth = 1.2 / v.s; c.stroke(); c.setLineDash([]);
+    }
+    // Auswahlrahmen (Lasso: zum Verschieben hineintippen)
+    if (this.tool === 'lasso' && this.selCount() && !this.lassoPts) {
+      const b = this.selBox();
+      if (b) { c.setLineDash([2 / v.s, 1.5 / v.s]); c.strokeStyle = SEL; c.lineWidth = 1 / v.s; c.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); c.setLineDash([]); }
     }
     // Rahmenauswahl
     if (this.band) {
@@ -677,7 +795,8 @@ export class SchematicEditor {
     if (this.draft && t !== 'wire') this.finishWire();
     this.tool = t;
     this.root.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('on', b.dataset.tool === t));
-    this.canvas.style.cursor = t === 'wire' ? 'crosshair' : t === 'place' ? 'copy' : 'default';
+    this.canvas.style.cursor = ['wire', 'wall', 'draw'].includes(t) ? 'crosshair' : t === 'place' ? 'copy' : 'default';
+    if (t !== 'lasso' && t !== 'select') this.clearSel();
     if (t !== 'place') this.ghostAt = null;
     this.fillLib(this.root.querySelector('.sch-search input').value || '');
     this.updateCtx();
@@ -686,12 +805,12 @@ export class SchematicEditor {
 
   startPlace(type) {
     this.placeType = type;
-    this.placeRot = SYMBOLS[type].kind === 'net' ? 0 : 0;
+    this.placeRot = getSym(type).kind === 'net' ? 0 : 0;
     this.placeMir = false;
     this.clearSel();
     this.setTool('place');
     if (window.innerWidth < 900) this.toggleLib(false);
-    toast(`${SYMBOLS[type].name}: auf das Blatt tippen`);
+    toast(`${getSym(type).name}: auf das Blatt tippen`);
   }
 
   toggleLib(force) {
@@ -701,8 +820,8 @@ export class SchematicEditor {
     this.root.querySelector('[data-a="lib"]').classList.toggle('on', open);
   }
 
-  clearSel() { this.sel = { parts: new Set(), wires: new Set(), texts: new Set() }; this.updateCtx(); }
-  selCount() { return this.sel.parts.size + this.sel.wires.size + this.sel.texts.size; }
+  clearSel() { this.sel = { parts: new Set(), wires: new Set(), texts: new Set(), ink: new Set(), walls: new Set() }; this.updateCtx(); }
+  selCount() { const s = this.sel; return s.parts.size + s.wires.size + s.texts.size + s.ink.size + s.walls.size; }
 
   updateCtx() {
     const box = this.ctxInner;
@@ -712,7 +831,7 @@ export class SchematicEditor {
     const hint = (t) => el('span', { class: 'ctx-hint' }, t);
     const sep = () => el('span', { class: 'ctx-sep' });
     if (this.tool === 'place') {
-      box.append(hint(`Platzieren: ${SYMBOLS[this.placeType].name}`), sep(),
+      box.append(hint(`Platzieren: ${getSym(this.placeType).name}`), sep(),
         btn('Drehen', () => { this.placeRot = ((this.placeRot || 0) + 1) % 4; this.draw(); }),
         btn('Spiegeln', () => { this.placeMir = !this.placeMir; this.draw(); }),
         btn('Fertig', () => this.setTool('select'), 'primary'));
@@ -721,12 +840,35 @@ export class SchematicEditor {
       if (this.draft) box.append(sep(), btn('Richtung wechseln', () => { this.vertFirst = !this.vertFirst; this.draw(); }), btn('Fertig', () => this.finishWire(), 'primary'), btn('Abbrechen', () => { this.draft = null; this.updateCtx(); this.draw(); }));
     } else if (this.tool === 'text') {
       box.append(hint('Auf das Blatt tippen, um einen Text zu setzen'));
+    } else if (this.tool === 'lasso') {
+      box.append(hint('Einkreisen zum Auswählen – danach ziehen zum Verschieben'));
+      if (this.selCount()) box.append(sep(), btn('Auswahl aufheben', () => { this.clearSel(); this.draw(); }));
+    } else if (this.tool === 'draw' || this.tool === 'erase') {
+      const ink = this.inkStyle();
+      box.append(hint(this.tool === 'draw' ? 'Frei zeichnen und notieren' : 'Über Freihand-Striche wischen'), sep());
+      for (const c of ['#1f5eff', '#e5383b', '#139a52', '#16161a', '#f08c00', '#ffd400']) {
+        const b = el('button', { class: `csw ${ink.c === c ? 'on' : ''}`, style: { '--c': c }, 'aria-label': 'Farbe' });
+        b.addEventListener('click', () => { this.setInk({ c }); this.setTool('draw'); });
+        box.append(b);
+      }
+      box.append(sep());
+      [[0.35, 'fein'], [0.6, 'mittel'], [1.2, 'dick'], [4, 'Marker']].forEach(([w, l]) => box.append(btn(l, () => { this.setInk({ w }); this.setTool('draw'); }, ink.w === w ? 'on' : '')));
+    } else if (this.tool === 'wall') {
+      box.append(hint('Wand: Start antippen, Ecken antippen, doppelt tippen beendet · oder ziehen'), sep(),
+        btn('Außenwand', () => { this.wallT = 4.8; this.updateCtx(); }, (this.wallT || 4.8) === 4.8 ? 'on' : ''),
+        btn('Innenwand', () => { this.wallT = 2.3; this.updateCtx(); }, this.wallT === 2.3 ? 'on' : ''));
+      if (this.draft) box.append(sep(), btn('Fertig', () => this.finishWire(), 'primary'));
     } else if (this.selCount()) {
-      box.append(hint(`${this.selCount()} ausgewählt`), sep());
+      const sel = this.selected();
+      const locked = sel.parts.some((p) => p.lock) || sel.texts.some((t) => t.lock);
+      box.append(hint(`${this.selCount()} ausgewählt${locked ? ' · gesperrt' : ''}`), sep());
       if (this.sel.parts.size === 1 && !this.sel.wires.size) box.append(btn('Eigenschaften', () => this.editProps()));
+      if (this.sel.wires.size === 1 && !this.sel.parts.size) box.append(btn('Leitung …', () => this.editWire()));
       if (this.sel.texts.size === 1 && !this.sel.parts.size) box.append(btn('Text ändern', () => this.editText()));
-      box.append(btn('Drehen', () => this.rotateSel()), btn('Spiegeln', () => this.mirrorSel()), btn('Duplizieren', () => this.duplicate()),
-        btn('Kopieren', () => this.copy()), btn('Löschen', () => this.deleteSel(), 'danger'));
+      box.append(btn(locked ? 'Entsperren' : 'Sperren', () => this.lockSel(!locked)));
+      if (!locked) box.append(btn('Drehen', () => this.rotateSel()), btn('Spiegeln', () => this.mirrorSel()));
+      box.append(btn('Duplizieren', () => this.duplicate()), btn('Kopieren', () => this.copy()));
+      if (!locked) box.append(btn('Löschen', () => this.deleteSel(), 'danger'));
     } else {
       box.append(hint('Antippen = auswählen · Ziehen = verschieben · Doppeltippen = Eigenschaften'));
       if (this.clip) box.append(sep(), btn('Einfügen', () => this.paste()));
@@ -746,6 +888,12 @@ export class SchematicEditor {
       case 'rotate': if (this.tool === 'place') { this.placeRot = ((this.placeRot || 0) + 1) % 4; this.draw(); } else this.rotateSel(); break;
       case 'mirror': if (this.tool === 'place') { this.placeMir = !this.placeMir; this.draw(); } else this.mirrorSel(); break;
       case 'delete': this.deleteSel(); break;
+      case 'lock': {
+        if (!this.selCount()) { toast('Erst Bauteile auswählen, dann sperren'); break; }
+        const sel = this.selected();
+        this.lockSel(!(sel.parts.some((p) => p.lock) || sel.texts.some((t) => t.lock)));
+        break;
+      }
       case 'check': this.checkDialog(); break;
       case 'undo': this.undo(); break;
       case 'redo': this.redo(); break;
@@ -814,20 +962,20 @@ export class SchematicEditor {
   async titleDialog() {
     const m = this.nb.schMeta, sm = this.sh.meta;
     const inp = (v, ph) => el('input', { class: 'inp', type: 'text', value: v || '', placeholder: ph || '' });
-    const f = { project: inp(m.project), company: inp(m.company), author: inp(m.author), title: inp(sm.title), date: inp(sm.date), rev: inp(sm.rev, 'z. B. A') };
+    const f = { project: inp(m.project), company: inp(m.company), author: inp(m.author), title: inp(sm.title), date: inp(sm.date), rev: inp(sm.rev, 'z. B. A'), scale: inp(sm.scale, this.kind === 'install' ? 'z. B. 1:50' : 'optional') };
     const sizeSel = el('select', { class: 'inp' }, Object.entries(SHEET_SIZES).map(([k, s]) => el('option', { value: k, selected: k === this.sh.size ? true : null }, s.label)));
     const fld = (l, n) => el('div', { class: 'field' }, el('div', { class: 'field-label' }, l), n);
     const r = await dialog({
       title: 'Schriftfeld', wide: true,
       body: el('div', { class: 'form-grid' },
         fld('Projekt (alle Blätter)', f.project), fld('Firma / Schule (alle Blätter)', f.company), fld('Zeichner (alle Blätter)', f.author),
-        fld('Blatt / Funktion', f.title), fld('Datum', f.date), fld('Revision', f.rev), fld('Blattgröße', sizeSel)),
+        fld('Blatt / Funktion', f.title), fld('Datum', f.date), fld('Revision', f.rev), fld('Maßstab', f.scale), fld('Blattgröße', sizeSel)),
       buttons: [{ label: 'Abbrechen', value: null }, { label: 'Speichern', value: true, primary: true }],
     });
     if (!r) return;
     const before = this.snap();
     Object.assign(m, { project: f.project.value, company: f.company.value, author: f.author.value });
-    Object.assign(sm, { title: f.title.value, date: f.date.value, rev: f.rev.value });
+    Object.assign(sm, { title: f.title.value, date: f.date.value, rev: f.rev.value, scale: f.scale.value });
     this.sh.size = sizeSel.value;
     this.commit(before);
     this.refreshSheet();
@@ -873,6 +1021,11 @@ export class SchematicEditor {
   // ------------------------------------------------------------ Eingabe
   pt(e) { return { id: e.pointerId, sx: e.clientX - this.rect.left, sy: e.clientY - this.rect.top, type: e.pointerType || 'mouse', t: e.timeStamp }; }
 
+  fingerPans() {
+    const st = getSettings();
+    return st.finger === 'pan' || (st.finger !== 'draw' && st.pencilSeen);
+  }
+
   onDown(e) {
     e.preventDefault();
     closePopover();
@@ -880,35 +1033,75 @@ export class SchematicEditor {
     const p = this.pt(e);
     try { this.canvas.setPointerCapture(e.pointerId); } catch (x) { /* */ }
     this.pointers.set(p.id, { ...p, x0: p.sx, y0: p.sy });
+    if (p.type === 'pen' && !getSettings().pencilSeen) saveSettings({ pencilSeen: true });
     const touches = [...this.pointers.values()].filter((q) => q.type === 'touch');
+    if (p.type === 'touch') {
+      if (touches.length === 1) this.tap = { t0: p.t, max: 1, moved: false };
+      else if (this.tap) this.tap.max = Math.max(this.tap.max, touches.length);
+    }
     if (touches.length >= 2) {
-      // zwei Finger: bewegen und zoomen
+      // zwei Finger: bewegen und zoomen (angefangene Aktion verwerfen)
       if (this.drag && this.drag.before) this.restoreDrag();
-      this.drag = null; this.band = null;
+      if (this.drag && this.drag.kind === 'ink') this.inkDraft = null;
+      this.drag = null; this.band = null; this.lassoPts = null;
+      if (this.draft && this.draft.dragging) this.draft = null;
       const [a, b] = touches;
       this.pinch = { d: Math.hypot(b.sx - a.sx, b.sy - a.sy) || 1, cx: (a.sx + b.sx) / 2, cy: (a.sy + b.sy) / 2, v: { ...this.view } };
+      this.draw();
       return;
     }
     const [wx, wy] = this.toWorld(p.sx, p.sy);
     const tol = 9 / this.view.s;
     this.down = { ...p, wx, wy, moved: false };
     if (e.button === 1 || e.button === 2) { this.drag = { kind: 'pan', v: { ...this.view } }; return; }
+    const finger = p.type === 'touch';
+    const T = this.tool;
 
-    if (this.tool === 'place' || this.tool === 'text') { this.drag = { kind: 'tap' }; return; }
-    if (this.tool === 'wire') {
-      const s = this.snapTarget(wx, wy, tol) || [snap(wx), snap(wy)];
-      this.drag = { kind: 'wire', start: s };
+    // Platzieren: auf ein vorhandenes Bauteil drücken = es verschieben
+    if (T === 'place') {
+      const part = this.hitPart(wx, wy);
+      if (part && !part.lock) { this.clearSel(); this.sel.parts.add(part.id); this.drag = { kind: 'move', before: this.snap(), orig: JSON.parse(JSON.stringify(this.sh)), placeTap: true }; return; }
+      this.drag = { kind: 'tap' };
+      return;
+    }
+    if (T === 'text') { this.drag = { kind: 'tap' }; return; }
+    if (finger && this.fingerPans() && ['wire', 'wall', 'draw', 'erase', 'lasso'].includes(T)) { this.drag = { kind: 'pan', v: { ...this.view } }; return; }
+    if (T === 'wire' || T === 'wall') {
+      const s = (T === 'wire' ? this.snapTarget(wx, wy, tol) : this.wallSnap(wx, wy, tol)) || [snap(wx, T === 'wall' ? 2.5 : GRID), snap(wy, T === 'wall' ? 2.5 : GRID)];
+      this.drag = { kind: 'wire', start: s, wall: T === 'wall' };
+      return;
+    }
+    if (T === 'draw') {
+      this.inkDraft = { id: uid(), pts: [round1(wx), round1(wy)], ...this.inkStyle() };
+      this.drag = { kind: 'ink' };
+      this.draw();
+      return;
+    }
+    if (T === 'erase') { this.drag = { kind: 'erase', before: this.snap(), hit: false }; this.eraseAt(wx, wy); return; }
+    if (T === 'lasso') {
+      const sb = this.selBox();
+      if (sb && wx >= sb.x0 && wx <= sb.x1 && wy >= sb.y0 && wy <= sb.y1 && !this.selLocked()) {
+        this.drag = { kind: 'move', before: this.snap(), orig: JSON.parse(JSON.stringify(this.sh)) };
+        return;
+      }
+      this.lassoPts = [wx, wy];
+      this.drag = { kind: 'lasso' };
       return;
     }
     // Auswählen
     const part = this.hitPart(wx, wy);
     const txt = !part && this.hitText(wx, wy);
     const wire = !part && !txt && this.hitWire(wx, wy, tol * 0.7);
-    if (part || txt) {
-      const id = (part || txt).id, which = part ? 'parts' : 'texts';
-      if (!this.sel[which].has(id)) { if (!e.shiftKey) this.clearSel(); this.sel[which].add(id); }
-      this.drag = { kind: 'move', before: this.snap(), orig: JSON.parse(JSON.stringify(this.sh)), dbl: part && this.lastTap && this.lastTap.id === id && e.timeStamp - this.lastTap.t < 380 };
-      this.lastTap = part ? { id, t: e.timeStamp } : null;
+    const ink = !part && !txt && !wire && this.hitInk(wx, wy, tol * 0.7);
+    const wall = !part && !txt && !wire && !ink && this.hitWall(wx, wy, tol * 0.7);
+    if (part || txt || ink || wall) {
+      const it = part || txt || ink || wall;
+      const which = part ? 'parts' : txt ? 'texts' : ink ? 'ink' : 'walls';
+      if (!this.sel[which].has(it.id)) { if (!e.shiftKey) this.clearSel(); this.sel[which].add(it.id); }
+      const dbl = part && this.lastTap && this.lastTap.id === it.id && e.timeStamp - this.lastTap.t < 380;
+      this.lastTap = part ? { id: it.id, t: e.timeStamp } : null;
+      if (this.selLocked()) this.drag = { kind: 'locked', dbl };
+      else this.drag = { kind: 'move', before: this.snap(), orig: JSON.parse(JSON.stringify(this.sh)), dbl };
       this.updateCtx(); this.draw();
       return;
     }
@@ -918,8 +1111,10 @@ export class SchematicEditor {
       this.updateCtx(); this.draw();
       return;
     }
-    if (p.type === 'touch') this.drag = { kind: 'pan', v: { ...this.view }, tapClear: true };
-    else this.drag = { kind: 'band' };
+    const tr = titleRect(this.sh);
+    const inTitle = wx >= tr.x0 && wx <= tr.x1 && wy >= tr.y0 && wy <= tr.y1;
+    if (finger) this.drag = { kind: 'pan', v: { ...this.view }, tapClear: true, title: inTitle };
+    else this.drag = { kind: 'band', title: inTitle };
   }
 
   onMove(e) {
@@ -929,10 +1124,15 @@ export class SchematicEditor {
     if (!q) {
       // Schweben (Maus/Pencil)
       if (this.tool === 'place') { this.ghostAt = [snap(wx), snap(wy)]; this.draw(); }
-      if (this.tool === 'wire') { this.hover = this.snapTarget(wx, wy, 9 / this.view.s); if (this.draft) this.draft.cursor = this.hover || [snap(wx), snap(wy)]; this.draw(); }
+      if (this.tool === 'wire' || this.tool === 'wall') {
+        this.hover = this.tool === 'wire' ? this.snapTarget(wx, wy, 9 / this.view.s) : null;
+        if (this.draft) this.draft.cursor = this.hover || [snap(wx, this.tool === 'wall' ? 2.5 : GRID), snap(wy, this.tool === 'wall' ? 2.5 : GRID)];
+        this.draw();
+      }
       return;
     }
     q.sx = p.sx; q.sy = p.sy;
+    if (this.tap && Math.hypot(p.sx - q.x0, p.sy - q.y0) > 10) this.tap.moved = true;
     if (this.pinch) {
       const t = [...this.pointers.values()].filter((x) => x.type === 'touch');
       if (t.length < 2) return;
@@ -946,18 +1146,29 @@ export class SchematicEditor {
     }
     const D = this.down;
     if (!D || !this.drag) return;
+    const dr = this.drag;
+    if (dr.kind === 'ink') {
+      const list = (e.getCoalescedEvents && e.getCoalescedEvents().length ? e.getCoalescedEvents() : [e]).map((ev) => this.toWorld(ev.clientX - this.rect.left, ev.clientY - this.rect.top));
+      const pts = this.inkDraft.pts;
+      for (const [x, y] of list) if (Math.hypot(x - pts[pts.length - 2], y - pts[pts.length - 1]) > 0.25) pts.push(round1(x), round1(y));
+      D.moved = true;
+      this.draw();
+      return;
+    }
+    if (dr.kind === 'erase') { this.eraseAt(wx, wy); return; }
     if (!D.moved && Math.hypot(p.sx - D.sx, p.sy - D.sy) > 6) D.moved = true;
     if (!D.moved) return;
-    const dr = this.drag;
     if (dr.kind === 'pan') { this.view.x = dr.v.x + p.sx - D.sx; this.view.y = dr.v.y + p.sy - D.sy; this.draw(); return; }
     if (dr.kind === 'tap' && p.type === 'touch') { dr.kind = 'pan'; dr.v = { ...this.view }; return; }
     if (dr.kind === 'move') { this.applyMove(dr.orig, snap(wx - D.wx), snap(wy - D.wy)); this.draw(); return; }
     if (dr.kind === 'seg') { this.applySeg(dr, snap(wx - D.wx), snap(wy - D.wy)); this.draw(); return; }
     if (dr.kind === 'band') { this.band = [D.wx, D.wy, wx, wy]; this.draw(); return; }
+    if (dr.kind === 'lasso') { const L = this.lassoPts; if (Math.hypot(wx - L[L.length - 2], wy - L[L.length - 1]) > 0.8) L.push(wx, wy); this.draw(); return; }
     if (dr.kind === 'wire') {
-      const tgt = this.snapTarget(wx, wy, 9 / this.view.s) || [snap(wx), snap(wy)];
-      this.hover = tgt;
-      this.draft = { pts: [...dr.start], cursor: tgt, dragging: true };
+      const g = dr.wall ? 2.5 : GRID;
+      const tgt = (dr.wall ? this.wallSnap(wx, wy, 9 / this.view.s) : this.snapTarget(wx, wy, 9 / this.view.s)) || [snap(wx, g), snap(wy, g)];
+      this.hover = dr.wall ? null : tgt;
+      this.draft = { pts: [...dr.start], cursor: tgt, dragging: true, wall: dr.wall };
       this.draw();
     }
   }
@@ -965,17 +1176,34 @@ export class SchematicEditor {
   onUp(e, cancelled) {
     const p = this.pt(e);
     this.pointers.delete(p.id);
+    // Zwei Finger tippen = Rückgängig, drei = Wiederholen (wie beim Schreiben)
+    if (p.type === 'touch' && this.tap && ![...this.pointers.values()].some((x) => x.type === 'touch')) {
+      const tp = this.tap; this.tap = null;
+      if (!tp.moved && !cancelled && p.t - tp.t0 < 380 && tp.max >= 2 && getSettings().tapUndo !== false) {
+        this.pinch = null; this.drag = null; this.down = null;
+        if (tp.max === 2) { this.undo(); this.flash('Rückgängig'); } else { this.redo(); this.flash('Wiederholen'); }
+        return;
+      }
+    }
     if (this.pinch) { if ([...this.pointers.values()].filter((x) => x.type === 'touch').length < 2) this.pinch = null; this.drag = null; this.down = null; return; }
     const D = this.down, dr = this.drag;
     this.down = null; this.drag = null;
-    if (!D || !dr || cancelled) { this.band = null; this.draw(); return; }
+    if (!D || !dr || cancelled) { this.band = null; this.lassoPts = null; this.inkDraft = null; this.draw(); return; }
     const [wx, wy] = this.toWorld(p.sx, p.sy);
     switch (dr.kind) {
-      case 'pan': if (dr.tapClear && !D.moved) { this.clearSel(); this.draw(); } break;
+      case 'pan':
+        if (dr.tapClear && !D.moved) {
+          if (dr.title) { this.titleDialog(); break; }
+          this.clearSel(); this.draw();
+        }
+        break;
       case 'tap':
         if (D.moved) break;
         if (this.tool === 'place') this.placeAt(snap(wx), snap(wy));
         else if (this.tool === 'text') this.addText(snap(wx, 2.5), snap(wy, 2.5));
+        break;
+      case 'locked':
+        if (D.moved) toast('Gesperrt – zum Verschieben erst entsperren'); else if (dr.dbl) this.editProps();
         break;
       case 'move':
         if (!D.moved) { if (dr.dbl) this.editProps(); break; }
@@ -987,31 +1215,146 @@ export class SchematicEditor {
         this.sh.wires = this.sh.wires.map((w) => (w.id === dr.wire ? { ...w, pts: simplify(w.pts) } : w));
         this.commit(dr.before);
         break;
+      case 'ink': {
+        const k = this.inkDraft;
+        this.inkDraft = null;
+        if (!k) break;
+        const before = this.snap();
+        this.sh.ink.push(k);
+        this.commit(before);
+        break;
+      }
+      case 'erase':
+        if (dr.hit) this.commit(dr.before);
+        break;
+      case 'lasso': {
+        const poly = this.lassoPts;
+        this.lassoPts = null;
+        if (!poly || poly.length < 6) { this.clearSel(); this.draw(); break; }
+        if (!e.shiftKey) this.clearSel();
+        const inside = (x, y) => pointInPoly(x, y, poly);
+        for (const part of this.sh.parts) if (inside(part.x, part.y)) this.sel.parts.add(part.id);
+        for (const w of this.sh.wires) { let all = true; for (let i = 0; i < w.pts.length; i += 2) if (!inside(w.pts[i], w.pts[i + 1])) all = false; if (all) this.sel.wires.add(w.id); }
+        for (const w of this.sh.walls) { let all = true; for (let i = 0; i < w.pts.length; i += 2) if (!inside(w.pts[i], w.pts[i + 1])) all = false; if (all) this.sel.walls.add(w.id); }
+        for (const t of this.sh.texts) if (inside(t.x, t.y)) this.sel.texts.add(t.id);
+        for (const k of this.sh.ink) { let n = 0; for (let i = 0; i < k.pts.length; i += 2) if (inside(k.pts[i], k.pts[i + 1])) n++; if (n * 2 >= k.pts.length / 2) this.sel.ink.add(k.id); }
+        this.updateCtx(); this.draw();
+        break;
+      }
       case 'band': {
-        if (!D.moved) { this.clearSel(); this.draw(); break; }
+        if (!D.moved) { if (dr.title) { this.titleDialog(); break; } this.clearSel(); this.draw(); break; }
         const [ax, ay, bx, by] = this.band;
         const x0 = Math.min(ax, bx), x1 = Math.max(ax, bx), y0 = Math.min(ay, by), y1 = Math.max(ay, by);
+        const inR = (x, y) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
         if (!e.shiftKey) this.clearSel();
         for (const part of this.sh.parts) { const b = partBox(part); if (b.x0 >= x0 && b.x1 <= x1 && b.y0 >= y0 && b.y1 <= y1) this.sel.parts.add(part.id); }
-        for (const w of this.sh.wires) { let inside = true; for (let i = 0; i < w.pts.length; i += 2) if (w.pts[i] < x0 || w.pts[i] > x1 || w.pts[i + 1] < y0 || w.pts[i + 1] > y1) inside = false; if (inside) this.sel.wires.add(w.id); }
-        for (const t of this.sh.texts) if (t.x >= x0 && t.x <= x1 && t.y >= y0 && t.y <= y1) this.sel.texts.add(t.id);
+        for (const w of this.sh.wires) { let all = true; for (let i = 0; i < w.pts.length; i += 2) if (!inR(w.pts[i], w.pts[i + 1])) all = false; if (all) this.sel.wires.add(w.id); }
+        for (const w of this.sh.walls) { let all = true; for (let i = 0; i < w.pts.length; i += 2) if (!inR(w.pts[i], w.pts[i + 1])) all = false; if (all) this.sel.walls.add(w.id); }
+        for (const t of this.sh.texts) if (inR(t.x, t.y)) this.sel.texts.add(t.id);
+        for (const k of this.sh.ink) { let all = true; for (let i = 0; i < k.pts.length; i += 2) if (!inR(k.pts[i], k.pts[i + 1])) all = false; if (all) this.sel.ink.add(k.id); }
         this.band = null;
         this.updateCtx(); this.draw();
         break;
       }
       case 'wire': {
-        const tgt = this.snapTarget(wx, wy, 9 / this.view.s) || [snap(wx), snap(wy)];
+        const g = dr.wall ? 2.5 : GRID;
+        const tgt = (dr.wall ? this.wallSnap(wx, wy, 9 / this.view.s) : this.snapTarget(wx, wy, 9 / this.view.s)) || [snap(wx, g), snap(wy, g)];
         if (D.moved) {
-          // Ziehen: L-förmige Leitung von Start bis Ziel
           const pts = simplify([...dr.start, ...lRoute(dr.start[0], dr.start[1], tgt[0], tgt[1], this.vertFirst)]);
           this.draft = null;
-          if (pts.length >= 4) this.addWire(pts);
+          if (pts.length >= 4) (dr.wall ? this.addWall(pts) : this.addWire(pts));
           this.draw();
-        } else this.wireTap(tgt);
+        } else this.wireTap(tgt, dr.wall);
         break;
       }
       default: break;
     }
+  }
+
+  // ------------------------------------------------------------ Freihand, Wände, Sperren
+  inkStyle() { const st = getSettings().schInk || {}; return { c: st.c || '#1f5eff', w: st.w || 0.6 }; }
+  setInk(patch) { saveSettings({ schInk: { ...this.inkStyle(), ...patch } }); this.updateCtx(); }
+
+  eraseAt(x, y) {
+    const r = Math.max(1.5, 12 / this.view.s);
+    const before = this.sh.ink.length;
+    this.sh.ink = this.sh.ink.filter((k) => {
+      for (let i = 0; i < k.pts.length; i += 2) {
+        const d = i + 2 < k.pts.length ? segDist(x, y, k.pts[i], k.pts[i + 1], k.pts[i + 2], k.pts[i + 3]) : Math.hypot(x - k.pts[i], y - k.pts[i + 1]);
+        if (d <= r + (k.w || 0.5) / 2) return false;
+      }
+      return true;
+    });
+    if (this.sh.ink.length !== before) { if (this.drag) this.drag.hit = true; this.draw(); }
+    this.eraserAt = [x, y, r];
+    this.draw();
+  }
+
+  hitInk(x, y, tol) {
+    for (let j = this.sh.ink.length - 1; j >= 0; j--) {
+      const k = this.sh.ink[j];
+      for (let i = 0; i + 2 < k.pts.length; i += 2) if (segDist(x, y, k.pts[i], k.pts[i + 1], k.pts[i + 2], k.pts[i + 3]) <= tol + (k.w || 0.5) / 2) return k;
+      if (k.pts.length === 2 && Math.hypot(x - k.pts[0], y - k.pts[1]) <= tol) return k;
+    }
+    return null;
+  }
+  hitWall(x, y, tol) {
+    for (let j = this.sh.walls.length - 1; j >= 0; j--) {
+      const w = this.sh.walls[j];
+      for (let i = 0; i + 2 < w.pts.length; i += 2) if (segDist(x, y, w.pts[i], w.pts[i + 1], w.pts[i + 2], w.pts[i + 3]) <= tol + (w.t || 2.4) / 2) return w;
+    }
+    return null;
+  }
+  wallSnap(x, y, tol) {
+    let best = null, bd = tol;
+    for (const w of this.sh.walls) for (let i = 0; i < w.pts.length; i += 2) { const d = Math.hypot(w.pts[i] - x, w.pts[i + 1] - y); if (d < bd) { bd = d; best = [w.pts[i], w.pts[i + 1]]; } }
+    return best;
+  }
+  addWall(pts) {
+    const before = this.snap();
+    this.sh.walls.push({ id: uid(), pts, t: this.wallT || 4.8 });
+    this.commit(before);
+  }
+
+  selLocked() { const s = this.selected(); return s.parts.some((p) => p.lock) || s.texts.some((t) => t.lock); }
+  selBox() {
+    const s = this.selected();
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const add = (x, y) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); };
+    for (const p of s.parts) { const b = partBox(p); add(b.x0, b.y0); add(b.x1, b.y1); }
+    for (const w of [...s.wires, ...s.ink, ...s.walls]) for (let i = 0; i < w.pts.length; i += 2) add(w.pts[i], w.pts[i + 1]);
+    for (const t of s.texts) { add(t.x, t.y - t.size); add(t.x + String(t.text).length * t.size * 0.5, t.y); }
+    return x0 === Infinity ? null : { x0: x0 - 2, y0: y0 - 2, x1: x1 + 2, y1: y1 + 2 };
+  }
+  lockSel(lock) {
+    const before = this.snap();
+    for (const p of this.sh.parts) if (this.sel.parts.has(p.id)) p.lock = lock;
+    for (const t of this.sh.texts) if (this.sel.texts.has(t.id)) t.lock = lock;
+    this.commit(before);
+    toast(lock ? 'Gesperrt – kann nicht mehr verschoben oder gelöscht werden' : 'Entsperrt');
+  }
+
+  flash(t) {
+    let f = this.root.querySelector('.flash');
+    if (!f) { f = el('div', { class: 'flash' }); this.root.append(f); }
+    f.innerHTML = `${icon(t === 'Rückgängig' ? 'undo' : 'redo')}<span>${t}</span>`;
+    f.hidden = false; f.classList.remove('show'); void f.offsetWidth; f.classList.add('show');
+    clearTimeout(this.flashT); this.flashT = setTimeout(() => { f.hidden = true; }, 750);
+  }
+
+  async editWire() {
+    const w = this.sh.wires.find((x) => this.sel.wires.has(x.id));
+    if (!w) return;
+    const n = el('input', { class: 'inp', type: 'number', min: '0', max: '7', value: w.n || '', placeholder: 'z. B. 3' });
+    const label = el('input', { class: 'inp', type: 'text', value: w.label || '', placeholder: 'z. B. NYM-J 3×1,5' });
+    const fld = (l, x, h) => el('div', { class: 'field' }, el('div', { class: 'field-label' }, l), x, h ? el('div', { class: 'field-hint' }, h) : null);
+    const r = await dialog({ title: 'Leitung', body: el('div', { class: 'form-grid' }, fld('Aderzahl (Schrägstriche)', n, 'Im Installationsplan üblich, z. B. 3 für L, N, PE.'), fld('Bezeichnung', label)),
+      buttons: [{ label: 'Abbrechen', value: null }, { label: 'Übernehmen', value: true, primary: true }] });
+    if (!r) return;
+    const before = this.snap();
+    w.n = Math.max(0, Math.min(7, parseInt(n.value, 10) || 0));
+    w.label = label.value.trim();
+    this.commit(before);
   }
 
   restoreDrag() { const o = JSON.parse(this.drag.before); this.pages[this.idx].sch = o.sch; this.A = null; }
@@ -1042,6 +1385,9 @@ export class SchematicEditor {
     if (k === 'r') { this.action('rotate'); return; }
     if (k === 'x') { this.action('mirror'); return; }
     if (k === 'w') this.setTool('wire');
+    if (k === 'l') this.setTool('lasso');
+    if (k === 'p') this.setTool('draw');
+    if (k === 'e') this.setTool('erase');
     if (k === 'v') this.setTool('select');
     if (k === 't') this.setTool('text');
     if (k === 'enter' && this.draft) this.finishWire();
@@ -1060,6 +1406,8 @@ export class SchematicEditor {
       part.x += dx; part.y += dy;
     }
     for (const t of sh.texts) if (sel.texts.has(t.id)) { t.x += dx; t.y += dy; }
+    for (const k of sh.ink) if (sel.ink.has(k.id)) k.pts = k.pts.map((v, i) => v + (i % 2 ? dy : dx));
+    for (const w of sh.walls) if (sel.walls.has(w.id)) w.pts = w.pts.map((v, i) => v + (i % 2 ? dy : dx));
     for (const w of sh.wires) {
       if (sel.wires.has(w.id)) { w.pts = w.pts.map((v, i) => v + (i % 2 ? dy : dx)); continue; }
       const n = w.pts.length;
@@ -1097,32 +1445,37 @@ export class SchematicEditor {
   }
 
   placeAt(x, y) {
-    const sym = SYMBOLS[this.placeType];
+    const sym = getSym(this.placeType);
     const before = this.snap();
     let ref = '';
     const all = this.sheets().flatMap((x) => x.parts);
-    const coilRefs = new Set(all.filter((x) => SYMBOLS[x.type]?.kind === 'coil').map((x) => x.ref));
+    const coilRefs = new Set(all.filter((x) => getSym(x.type)?.kind === 'coil').map((x) => x.ref));
     if (sym.kind === 'net') ref = this.lastNet || 'L1';
     else if (['no', 'nc', 'co'].includes(sym.kind) && !sym.own) ref = this.lastCoil || this.nextRef(sym.prefix);
     else if (sym.kind === 'coil') {
       // Kontakte, die schon vor ihrer Spule gesetzt wurden, bekommen jetzt ihre Spule
-      const orphan = all.find((x) => ['no', 'nc', 'co'].includes(SYMBOLS[x.type]?.kind) && !SYMBOLS[x.type].own && x.ref && /^-?K/i.test(x.ref) && !coilRefs.has(x.ref));
+      const orphan = all.find((x) => ['no', 'nc', 'co'].includes(getSym(x.type)?.kind) && !getSym(x.type).own && x.ref && /^-?K/i.test(x.ref) && !coilRefs.has(x.ref));
       ref = orphan ? orphan.ref : this.nextRef(sym.prefix);
     } else if (sym.prefix) ref = this.nextRef(sym.prefix);
     const part = { id: uid(), type: this.placeType, x, y, rot: this.placeRot || 0, mir: !!this.placeMir, ref, val: sym.val || '', note: '' };
+    if (sym.custom) {
+      const list = (this.nb.schSymbols || []).filter((c) => c.id !== sym.id);
+      const { custom, cat, ...def } = sym;
+      this.nb.schSymbols = [...list, def];
+    }
     if (sym.kind === 'coil') this.lastCoil = ref;
     this.sh.parts.push(part);
     this.commit(before);
     if (sym.kind === 'net') { this.sel.parts = new Set([part.id]); this.editProps(); }
   }
 
-  wireTap(tgt) {
-    if (!this.draft) { this.draft = { pts: [...tgt], cursor: tgt }; this.updateCtx(); this.draw(); return; }
+  wireTap(tgt, wall) {
+    if (!this.draft) { this.draft = { pts: [...tgt], cursor: tgt, wall }; this.updateCtx(); this.draw(); return; }
     const pts = this.draft.pts;
     const lx = pts[pts.length - 2], ly = pts[pts.length - 1];
     if (same(lx, ly, tgt[0], tgt[1])) { this.finishWire(); return; }
     pts.push(...lRoute(lx, ly, tgt[0], tgt[1], this.vertFirst));
-    if (pts.length >= 4 && this.isConnPoint(tgt[0], tgt[1])) { this.finishWire(); return; }
+    if (!this.draft.wall && pts.length >= 4 && this.isConnPoint(tgt[0], tgt[1])) { this.finishWire(); return; }
     this.updateCtx();
     this.draw();
   }
@@ -1138,7 +1491,7 @@ export class SchematicEditor {
   finishWire() {
     const d = this.draft;
     this.draft = null;
-    if (d) { const pts = simplify(d.pts); if (pts.length >= 4) this.addWire(pts); }
+    if (d) { const pts = simplify(d.pts); if (pts.length >= 4) (d.wall ? this.addWall(pts) : this.addWire(pts)); }
     this.updateCtx();
     this.draw();
   }
@@ -1171,7 +1524,7 @@ export class SchematicEditor {
     const sh = this.sh;
     const pinMap = new Map();
     for (const part of sh.parts) {
-      if (!this.sel.parts.has(part.id)) continue;
+      if (!this.sel.parts.has(part.id) || part.lock) continue;
       const old = partPins(part);
       fn(part);
       partPins(part).forEach((np, i) => pinMap.set(key(old[i].x, old[i].y), [np.x, np.y]));
@@ -1190,16 +1543,20 @@ export class SchematicEditor {
     if (!this.selCount()) { toast('Nichts ausgewählt'); return; }
     const before = this.snap();
     const s = this.sel;
-    this.sh.parts = this.sh.parts.filter((p) => !s.parts.has(p.id));
+    const kept = this.sh.parts.filter((p) => s.parts.has(p.id) && p.lock).length + this.sh.texts.filter((t) => s.texts.has(t.id) && t.lock).length;
+    this.sh.parts = this.sh.parts.filter((p) => !s.parts.has(p.id) || p.lock);
     this.sh.wires = this.sh.wires.filter((w) => !s.wires.has(w.id));
-    this.sh.texts = this.sh.texts.filter((t) => !s.texts.has(t.id));
+    this.sh.texts = this.sh.texts.filter((t) => !s.texts.has(t.id) || t.lock);
+    this.sh.ink = this.sh.ink.filter((k) => !s.ink.has(k.id));
+    this.sh.walls = this.sh.walls.filter((w) => !s.walls.has(w.id));
+    if (kept) toast(`${kept} gesperrte${kept === 1 ? 's Element' : ' Elemente'} nicht gelöscht`);
     this.clearSel();
     this.commit(before);
   }
 
   selected() {
     const s = this.sel, sh = this.sh;
-    return { parts: sh.parts.filter((p) => s.parts.has(p.id)), wires: sh.wires.filter((w) => s.wires.has(w.id)), texts: sh.texts.filter((t) => s.texts.has(t.id)) };
+    return { parts: sh.parts.filter((p) => s.parts.has(p.id)), wires: sh.wires.filter((w) => s.wires.has(w.id)), texts: sh.texts.filter((t) => s.texts.has(t.id)), ink: sh.ink.filter((k) => s.ink.has(k.id)), walls: sh.walls.filter((w) => s.walls.has(w.id)) };
   }
   copy() { if (!this.selCount()) return; this.clip = JSON.parse(JSON.stringify(this.selected())); toast('Kopiert'); this.updateCtx(); }
   paste(off = 10) {
@@ -1208,13 +1565,15 @@ export class SchematicEditor {
     const c = JSON.parse(JSON.stringify(this.clip));
     this.clearSel();
     for (const p of c.parts) {
-      p.id = uid(); p.x += off; p.y += off;
-      const sym = SYMBOLS[p.type];
+      p.id = uid(); p.x += off; p.y += off; p.lock = false;
+      const sym = getSym(p.type);
       if (sym.prefix && !['no', 'nc', 'co'].includes(sym.kind) && sym.kind !== 'net') p.ref = this.nextRef(sym.prefix);
       this.sh.parts.push(p); this.sel.parts.add(p.id);
     }
     for (const w of c.wires) { w.id = uid(); w.pts = w.pts.map((v) => v + off); this.sh.wires.push(w); this.sel.wires.add(w.id); }
-    for (const t of c.texts) { t.id = uid(); t.x += off; t.y += off; this.sh.texts.push(t); this.sel.texts.add(t.id); }
+    for (const t of c.texts) { t.id = uid(); t.x += off; t.y += off; t.lock = false; this.sh.texts.push(t); this.sel.texts.add(t.id); }
+    for (const k of c.ink || []) { k.id = uid(); k.pts = k.pts.map((v) => v + off); this.sh.ink.push(k); this.sel.ink.add(k.id); }
+    for (const w of c.walls || []) { w.id = uid(); w.pts = w.pts.map((v) => v + off); this.sh.walls.push(w); this.sel.walls.add(w.id); }
     this.commit(before);
   }
   duplicate() { if (!this.selCount()) return; const keep = this.clip; this.copy(); this.paste(10); this.clip = keep; }
@@ -1222,7 +1581,7 @@ export class SchematicEditor {
   async editProps() {
     const part = this.sh.parts.find((p) => this.sel.parts.has(p.id));
     if (!part) return;
-    const sym = SYMBOLS[part.type];
+    const sym = getSym(part.type);
     const inp = (v, ph) => el('input', { class: 'inp', type: 'text', value: v || '', placeholder: ph || '', autocomplete: 'off', autocapitalize: 'off' });
     const fld = (l, n, h) => el('div', { class: 'field' }, el('div', { class: 'field-label' }, l), n, h ? el('div', { class: 'field-hint' }, h) : null);
     if (sym.kind === 'net') {
@@ -1233,11 +1592,19 @@ export class SchematicEditor {
       return;
     }
     const ref = inp(part.ref, `-${sym.prefix}1`), val = inp(part.val, 'z. B. 24 V DC, 10 kΩ'), note = inp(part.note, 'z. B. Hersteller, Artikelnummer');
+    // Anschluss-/Kontaktnummern (leer = automatisch)
+    const auto = this.analysis().pinLabels.get(part.id) || [];
+    const pins = partPins(part);
+    const pinInputs = pins.map((pin, i) => el('input', { class: 'inp pin-inp', type: 'text', value: (part.pl && part.pl[i]) || '', placeholder: auto[i] || sym.pins[i][2] || String(i + 1), autocomplete: 'off', autocapitalize: 'off' }));
+    const pinBox = pins.length ? el('div', { class: 'field' }, el('div', { class: 'field-label' }, 'Anschluss- / Kontaktnummern'),
+      el('div', { class: 'pin-row' }, pinInputs.map((x, i) => el('label', { class: 'pin-cell' }, el('small', null, `Anschluss ${i + 1}`), x))),
+      el('div', { class: 'field-hint' }, 'Leer lassen = automatisch (z. B. 13-14 nach Reihenfolge). Eigene Nummern haben Vorrang.')) : null;
+    const showRef = String(sym.cat).startsWith('Installation') ? el('label', { class: 'row-toggle' }, el('span', null, 'BMK im Plan anzeigen'), toggle(!!part.showRef, (v) => { part._showRef = v; })) : null;
     const r = await dialog({
       title: sym.name, wide: true,
-      body: el('div', { class: 'form-grid' },
+      body: el('div', null, el('div', { class: 'form-grid' },
         fld('Betriebsmittelkennzeichen (BMK)', ref, ['no', 'nc', 'co'].includes(sym.kind) ? 'Gleiches BMK wie die Spule → Kontaktspiegel und Querverweis entstehen automatisch.' : ''),
-        fld('Wert / Typ', val), fld('Bemerkung / Artikel', note)),
+        fld('Wert / Typ', val), fld('Bemerkung / Artikel', note)), pinBox, showRef),
       buttons: [{ label: 'Abbrechen', value: null }, { label: 'Übernehmen', value: true, primary: true }],
       onOpen: () => setTimeout(() => ref.select(), 60),
     });
@@ -1246,8 +1613,159 @@ export class SchematicEditor {
     let rv = ref.value.trim();
     if (rv && !rv.startsWith('-') && /^[A-Za-z]/.test(rv)) rv = '-' + rv;
     Object.assign(part, { ref: rv, val: val.value.trim(), note: note.value.trim() });
+    const pl = pinInputs.map((x) => x.value.trim());
+    if (pl.some(Boolean)) part.pl = pl; else delete part.pl;
+    if (part._showRef !== undefined) { part.showRef = part._showRef; delete part._showRef; }
     if (sym.kind === 'coil') this.lastCoil = rv;
     this.commit(before);
+  }
+
+  // ------------------------------------------------------------ Eigene Bauteile
+  async symbolEditor(existing) {
+    const def = existing ? JSON.parse(JSON.stringify({ id: existing.id, name: existing.name, prefix: existing.prefix, val: existing.val, kind: existing.kind || '', pins: existing.pins, ops: existing.ops }))
+      : { id: 'c_' + uid(), name: '', prefix: 'X', val: '', kind: '', pins: [], ops: [] };
+    const hist = [];
+    const W = 66, H = 44, K = 6; // Zeichenfläche in mm, Pixel pro mm
+    const cv = el('canvas', { class: 'symed-canvas' });
+    const d = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = W * K * d; cv.height = H * K * d;
+    cv.style.width = W * K + 'px'; cv.style.height = H * K + 'px';
+    const ctx = cv.getContext('2d');
+    let tool = 'l', drag = null;
+    const toMm = (e) => { const r = cv.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * W - W / 2, ((e.clientY - r.top) / r.height) * H - H / 2]; };
+    const sn = (v, g) => Math.round(v / g) * g;
+    const paintEd = () => {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.setTransform(K * d, 0, 0, K * d, (W / 2) * K * d, (H / 2) * K * d);
+      ctx.fillStyle = 'rgba(60,80,120,.25)';
+      for (let y = -H / 2; y <= H / 2; y += 2.5) for (let x = -W / 2; x <= W / 2; x += 2.5) { const big = x % 5 === 0 && y % 5 === 0; ctx.fillRect(x - (big ? 0.18 : 0.1), y - (big ? 0.18 : 0.1), big ? 0.36 : 0.2, big ? 0.36 : 0.2); }
+      ctx.strokeStyle = 'rgba(106,92,255,.35)'; ctx.lineWidth = 0.15;
+      ctx.beginPath(); ctx.moveTo(-2, 0); ctx.lineTo(2, 0); ctx.moveTo(0, -2); ctx.lineTo(0, 2); ctx.stroke();
+      registerCustom([{ ...def, id: '__edit' }]);
+      const pen = new CanvasPen(ctx, 0.3);
+      drawSymbol(pen, { type: '__edit', x: 0, y: 0, rot: 0 }, '#16161a');
+      if (drag && drag.preview) drawSymbol(pen, { type: '__prev', x: 0, y: 0 }, SEL);
+      for (const [x, y, n] of def.pins) {
+        ctx.fillStyle = '#e5384b'; ctx.beginPath(); ctx.arc(x, y, 0.8, 0, 7); ctx.fill();
+        pen.text(x + 1.2, y - 1, n || '', 2, 'left', '#e5384b');
+      }
+    };
+    const preview = (op) => { registerCustom([{ id: '__prev', name: '', pins: [], ops: [op] }]); drag.preview = true; };
+    const mkOp = (a, b) => {
+      const [x0, y0] = a, [x1, y1] = b;
+      if (tool === 'l') return ['l', x0, y0, x1, y1];
+      if (tool === 'r') return ['r', Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0), false];
+      if (tool === 'c') return ['c', x0, y0, Math.max(0.5, Math.hypot(x1 - x0, y1 - y0)), false];
+      return null;
+    };
+    cv.addEventListener('pointerdown', async (e) => {
+      e.preventDefault();
+      try { cv.setPointerCapture(e.pointerId); } catch (x) { /* */ }
+      const [x, y] = toMm(e);
+      const g = 1.25;
+      if (tool === 'pin') {
+        hist.push(JSON.stringify(def));
+        def.pins.push([sn(x, 5), sn(y, 5), String(def.pins.length + 1)]);
+        paintEd(); return;
+      }
+      if (tool === 't') {
+        const t = await prompt('Text im Symbol', '', { placeholder: 'z. B. M, ~, 3~', okLabel: 'Setzen' });
+        if (t) { hist.push(JSON.stringify(def)); def.ops.push(['t', sn(x, g), sn(y, g), t, 3]); paintEd(); }
+        return;
+      }
+      if (tool === 'x') {
+        // nächstes Element entfernen
+        let best = -1, bd = 2.5, pin = false;
+        def.pins.forEach(([px, py], i) => { const dd = Math.hypot(px - x, py - y); if (dd < bd) { bd = dd; best = i; pin = true; } });
+        def.ops.forEach((op, i) => {
+          let dd = Infinity;
+          if (op[0] === 'l' || op[0] === 'd') dd = segDist(x, y, op[1], op[2], op[3], op[4]);
+          else if (op[0] === 'r') dd = Math.min(segDist(x, y, op[1], op[2], op[1] + op[3], op[2]), segDist(x, y, op[1], op[2] + op[4], op[1] + op[3], op[2] + op[4]), segDist(x, y, op[1], op[2], op[1], op[2] + op[4]), segDist(x, y, op[1] + op[3], op[2], op[1] + op[3], op[2] + op[4]));
+          else if (op[0] === 'c' || op[0] === 'a') dd = Math.abs(Math.hypot(x - op[1], y - op[2]) - op[3]);
+          else if (op[0] === 't') dd = Math.hypot(x - op[1], y - op[2]);
+          else if (op[0] === 'p') for (let k = 0; k + 2 < op[1].length; k += 2) dd = Math.min(dd, segDist(x, y, op[1][k], op[1][k + 1], op[1][k + 2], op[1][k + 3]));
+          if (dd < bd) { bd = dd; best = i; pin = false; }
+        });
+        if (best >= 0) { hist.push(JSON.stringify(def)); if (pin) def.pins.splice(best, 1); else def.ops.splice(best, 1); paintEd(); }
+        return;
+      }
+      drag = { a: [sn(x, g), sn(y, g)] };
+    });
+    cv.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const [x, y] = toMm(e);
+      const op = mkOp(drag.a, [sn(x, 1.25), sn(y, 1.25)]);
+      if (op) { preview(op); paintEd(); }
+    });
+    cv.addEventListener('pointerup', (e) => {
+      if (!drag) return;
+      const [x, y] = toMm(e);
+      const op = mkOp(drag.a, [sn(x, 1.25), sn(y, 1.25)]);
+      drag = null;
+      if (op && !(op[0] === 'l' && op[1] === op[3] && op[2] === op[4]) && !(op[0] === 'r' && (!op[3] || !op[4]))) { hist.push(JSON.stringify(def)); def.ops.push(op); }
+      paintEd();
+    });
+    cv.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+    const toolSeg = el('div', { class: 'seg' }, [['l', 'Linie'], ['r', 'Rechteck'], ['c', 'Kreis'], ['t', 'Text'], ['pin', 'Anschluss'], ['x', 'Löschen']].map(([k, l]) => {
+      const b = el('button', { type: 'button', class: k === tool ? 'on' : '' }, l);
+      b.addEventListener('click', () => { tool = k; toolSeg.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); });
+      return b;
+    }));
+    const undoBtn = el('button', { class: 'ctx-btn', type: 'button', onclick: () => { const h = hist.pop(); if (h) { Object.assign(def, JSON.parse(h)); paintEd(); } } }, 'Rückgängig');
+    const tplSel = el('select', { class: 'inp' }, el('option', { value: '' }, 'Leer beginnen'),
+      Object.entries(allSymbols()).filter(([k, v]) => !v.custom && k !== '__edit' && k !== '__prev').map(([k, v]) => el('option', { value: k }, `${v.cat}: ${v.name}`)));
+    tplSel.addEventListener('change', () => {
+      const t = getSym(tplSel.value);
+      if (!t) return;
+      hist.push(JSON.stringify(def));
+      def.ops = JSON.parse(JSON.stringify(t.ops)); def.pins = JSON.parse(JSON.stringify(t.pins));
+      if (!name.value) name.value = t.name + ' (eigen)';
+      prefix.value = t.prefix || prefix.value; kind.value = t.kind && ['no', 'nc', 'co', 'coil'].includes(t.kind) ? t.kind : '';
+      paintEd();
+    });
+    const name = el('input', { class: 'inp', type: 'text', value: def.name, placeholder: 'z. B. Lichtschranke' });
+    const prefix = el('input', { class: 'inp', type: 'text', value: def.prefix, placeholder: 'z. B. B', maxlength: '3' });
+    const val = el('input', { class: 'inp', type: 'text', value: def.val, placeholder: 'optional' });
+    const kind = el('select', { class: 'inp' }, [['', 'Allgemein'], ['no', 'Schließer (Kontakt)'], ['nc', 'Öffner (Kontakt)'], ['co', 'Wechsler (Kontakt)'], ['coil', 'Spule (Kontaktspiegel)']].map(([v, l]) => el('option', { value: v, selected: def.kind === v ? true : null }, l)));
+    const fld = (l, n) => el('div', { class: 'field' }, el('div', { class: 'field-label' }, l), n);
+    const buttons = [{ label: 'Abbrechen', value: null }];
+    if (existing) buttons.push({ label: 'Löschen', value: 'del', danger: true });
+    buttons.push({ label: 'Speichern', primary: true, value: () => {
+      if (!name.value.trim()) { name.focus(); toast('Bitte einen Namen eingeben'); return undefined; }
+      if (!def.ops.length) { toast('Bitte zuerst etwas zeichnen'); return undefined; }
+      return 'save';
+    } });
+    const r = await dialog({
+      title: existing ? 'Bauteil bearbeiten' : 'Eigenes Bauteil', wide: true,
+      body: el('div', { class: 'symed' },
+        el('div', { class: 'symed-bar' }, toolSeg, undoBtn),
+        cv,
+        el('p', { class: 'field-hint' }, 'Ziehen zeichnet Linien, Rechtecke und Kreise. Anschlüsse (rot) rasten im 5-mm-Raster ein – dort werden Leitungen angeschlossen. Das Kreuz ist die Mitte.'),
+        el('div', { class: 'form-grid' }, fld('Name', name), fld('Kennbuchstabe (BMK)', prefix), fld('Art', kind), fld('Standardwert', val), existing ? null : fld('Vorlage', tplSel))),
+      buttons,
+      onOpen: () => setTimeout(paintEd, 30),
+    });
+    unregisterCustom('__edit'); unregisterCustom('__prev');
+    const list = (getSettings().schCustom || []).filter((c) => c.id !== def.id);
+    if (r === 'del') {
+      if (!(await confirm('Bauteil löschen?', `„${def.name}“ aus deiner Bibliothek entfernen? Bereits gezeichnete Pläne behalten es.`, 'Löschen', true))) return;
+      saveSettings({ schCustom: list });
+      unregisterCustom(def.id);
+      registerCustom(this.nb.schSymbols || []);
+      this.fillLib(''); this.draw();
+      return;
+    }
+    if (r !== 'save') return;
+    Object.assign(def, { name: name.value.trim(), prefix: prefix.value.trim().replace(/^-/, '').toUpperCase(), val: val.value.trim(), kind: kind.value || undefined });
+    saveSettings({ schCustom: [...list, def] });
+    registerCustom([def]);
+    if ((this.nb.schSymbols || []).some((c) => c.id === def.id)) this.nb.schSymbols = this.nb.schSymbols.map((c) => (c.id === def.id ? def : c));
+    this.A = null;
+    this.fillLib('');
+    this.saveSoon();
+    this.draw();
+    toast(`„${def.name}“ gespeichert – unter „Eigene Bauteile“`);
   }
 
   // ------------------------------------------------------------ Prüfen
@@ -1334,7 +1852,7 @@ export class SchematicEditor {
   exportBom() {
     const groups = new Map();
     this.sheets().forEach((sh, s) => sh.parts.forEach((p) => {
-      const sym = SYMBOLS[p.type];
+      const sym = getSym(p.type);
       if (!sym || ['net', 'gnd'].includes(sym.kind) || (['no', 'nc', 'co'].includes(sym.kind) && !sym.own)) return;
       const k = `${p.type}|${p.val}|${p.note}`;
       if (!groups.has(k)) groups.set(k, { sym, val: p.val, note: p.note, refs: [] });
@@ -1350,7 +1868,7 @@ export class SchematicEditor {
     const A = analyze(this.sheets());
     const rows = [['Netz', 'Anschlüsse', 'Anzahl']];
     for (const n of A.nets) {
-      rows.push([n.name, n.pins.map((q) => `${q.part.ref || SYMBOLS[q.part.type].name}:${A.pinLabels.get(q.part.id)?.[q.pin.i] || q.pin.name || q.pin.i + 1}`).join(', '), n.pins.length]);
+      rows.push([n.name, n.pins.map((q) => `${q.part.ref || getSym(q.part.type).name}:${A.pinLabels.get(q.part.id)?.[q.pin.i] || q.pin.name || q.pin.i + 1}`).join(', '), n.pins.length]);
     }
     offerFile(this.csv(rows), `${safeFileName(this.nb.name)} – Netzliste.csv`, 'Netzliste ist fertig');
   }
@@ -1388,8 +1906,16 @@ export function schematicHelp() {
     ['Kontaktspiegel', 'Kontakte mit gleichem BMK wie die Spule (z. B. -K1) bekommen automatisch Nummern (13-14, 21-22) und Querverweise (/Blatt.Spalte)'],
     ['Potentiale', 'L1, N, PE, +24V … setzen – gleichnamige Potentiale sind verbunden, auch über Blätter'],
     ['Verbindungspunkte', 'Entstehen nur an Enden und T-Abzweigen – Kreuzungen bleiben unverbunden'],
-    ['Zwei Finger', 'Bewegen und zoomen'],
-    ['Tastatur', 'R drehen · X spiegeln · W verdrahten · V auswählen · Entf löschen · ⌘Z/⌘C/⌘V/⌘D'],
+    ['Im Platzier-Modus', 'Auf ein vorhandenes Bauteil drücken und ziehen = verschieben'],
+    ['Schloss', 'Auswählen → „Sperren“: Bauteil lässt sich nicht mehr verschieben, drehen oder löschen'],
+    ['Lasso', 'Einkreisen, dann in den Rahmen tippen und ziehen'],
+    ['Stift & Radierer', 'Frei in den Plan zeichnen und notieren – Radierer entfernt nur Freihand-Striche'],
+    ['Kontaktnummern', 'Eigenschaften → Anschluss-/Kontaktnummern überschreiben (leer = automatisch)'],
+    ['Schriftfeld', 'Unten rechts antippen zum Bearbeiten'],
+    ['Eigene Bauteile', 'Bauteile → „Neues Bauteil“: zeichnen, Anschlüsse setzen, speichern'],
+    ['Installationsplan', 'Wand-Werkzeug, Installationssymbole, Leitung auswählen → „Leitung …“ für Aderzahl'],
+    ['Zwei Finger', 'Ziehen/spreizen = bewegen & zoomen · tippen = Rückgängig · drei Finger tippen = Wiederholen'],
+    ['Tastatur', 'R drehen · X spiegeln · W verdrahten · L Lasso · P Stift · E Radierer · V auswählen · Entf löschen · ⌘Z/⌘C/⌘V/⌘D'],
   ];
   dialog({ title: 'Stromlaufplan – Hilfe', wide: true, body: el('div', { class: 'help-list' }, rows.map(([a, b]) => el('div', { class: 'help-row' }, el('span', { class: 'help-k' }, a), el('span', null, b)))), buttons: [{ label: 'Alles klar', value: true, primary: true }] });
 }
@@ -1400,13 +1926,13 @@ function symbolPreview(type) {
   c.width = c.height = size * d;
   c.style.width = c.style.height = size + 'px';
   const ctx = c.getContext('2d');
-  const part = { type, x: 0, y: 0, rot: 0, ref: SYMBOLS[type].kind === 'net' ? 'L1' : '' };
+  const part = { type, x: 0, y: 0, rot: 0, ref: getSym(type).kind === 'net' ? 'L1' : '' };
   const b = partBox(part);
   const k = Math.min((size - 8) / Math.max(1, b.x1 - b.x0), (size - 8) / Math.max(1, b.y1 - b.y0)) * d;
   ctx.setTransform(k, 0, 0, k, (size * d) / 2 - ((b.x0 + b.x1) / 2) * k, (size * d) / 2 - ((b.y0 + b.y1) / 2) * k);
   const pen = new CanvasPen(ctx, 1.4 * d / k);
   const color = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#16161a';
   drawSymbol(pen, part, color);
-  if (SYMBOLS[type].kind === 'net') pen.text(1.6, -1, 'L1', 3, 'left', color, 'alphabetic', true);
+  if (getSym(type).kind === 'net') pen.text(1.6, -1, 'L1', 3, 'left', color, 'alphabetic', true);
   return c;
 }

@@ -1,4 +1,4 @@
-# FingerNote 2.1
+# FingerNote 2.2
 
 Handschriftliche Notizen auf dem iPad – mit dem **Finger** oder dem **Apple Pencil**.
 Schlicht, modern, offline. Kein Abo, keine Werbung.
@@ -20,7 +20,13 @@ Schlicht, modern, offline. Kein Abo, keine Werbung.
   Verdrahtung im 5-mm-Raster (antippen oder mit dem Stift ziehen), Leitungen bleiben beim Verschieben verbunden,
   Verbindungspunkte nur an T-Abzweigen, **automatische BMK** (-K1, -S2 …), **Kontaktspiegel** und **Querverweise**
   (/Blatt.Spalte), Potentiale (L1, N, PE, +24V – auch über Blätter), **Planprüfung**,
-  Export als PDF, SVG, PNG, **Stückliste**, **Netzliste** und **Klemmenplan** (CSV)
+  Export als PDF, SVG, PNG, **Stückliste**, **Netzliste** und **Klemmenplan** (CSV).
+  Über 100 Symbole (Umfang wie im Fachkunde-Elektrotechnik-Buch), **eigene Bauteile** im Baukasten,
+  Bauteile **sperren** (Schloss), **Lasso**, **Stift & Radierer** zum Hineinzeichnen, Kontaktnummern frei änderbar,
+  Schriftfeld per Antippen bearbeiten, 2/3-Finger-Tippen = Rückgängig/Wiederholen
+- **Installationsplan** (neue Buchart): Wände, Türen, Fenster, Installationssymbole nach DIN EN 60617-11
+  (Steckdosen, Aus-/Serien-/Wechsel-/Kreuzschalter, Leuchten, Verteiler, Rauchmelder, LAN/TV/TAE …),
+  Leitungen mit Aderzahl und Bezeichnung (z. B. NYM-J 3×1,5), Maßstab im Schriftfeld
 - **PDFs** als Buch importieren oder in ein Buch einfügen – jede Seite direkt beschreibbar
 - **Bilder** einfügen, **sperren**, **vor oder hinter den Text** legen
 - Stift (druckempfindlich), Fineliner, Regenbogen, **Lieblingsstifte**, **Pipette**

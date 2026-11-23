@@ -200,7 +200,7 @@ export class Library {
   /** Fehlende Vorschaubilder im Hintergrund erzeugen. */
   async fillThumbs(list) {
     for (const nb of list) {
-      if (nb.kind !== 'notebook' || nb.thumb || nb.deleted || nb.mode === 'schematic') continue;
+      if (nb.kind !== 'notebook' || nb.thumb || nb.deleted || nb.mode === 'schematic' || nb.mode === 'install') continue;
       try {
         const data = await store.loadNotebook(nb.id);
         if (!data) continue;
@@ -271,11 +271,11 @@ export class Library {
     if (nb.thumb) cover.append(el('img', { src: nb.thumb, alt: '', draggable: 'false' }));
     else cover.append(el('div', { class: 'cover-blank' }));
     cover.append(el('span', { class: 'spine' }),
-      el('span', { class: 'mode-badge', html: icon(nb.mode === 'canvas' ? 'canvas' : nb.mode === 'schematic' ? 'circuit' : 'pages') + `<span>${nb.mode === 'canvas' ? 'Leinwand' : nb.mode === 'schematic' ? 'Stromlaufplan' : 'Seiten'}</span>` }));
+      el('span', { class: 'mode-badge', html: icon(nb.mode === 'canvas' ? 'canvas' : nb.mode === 'schematic' ? 'circuit' : nb.mode === 'install' ? 'layout' : 'pages') + `<span>${nb.mode === 'canvas' ? 'Leinwand' : nb.mode === 'schematic' ? 'Stromlaufplan' : nb.mode === 'install' ? 'Installationsplan' : 'Seiten'}</span>` }));
     const n = (nb.pages || []).length;
     const ns = (nb.sections || []).length;
     const sub = this.tab === 'trash' ? `gelöscht ${relTime(nb.deleted)}` :
-      `${relTime(nb.updated)} · ${nb.mode === 'canvas' ? (ns > 1 ? `${ns} Leinwände` : 'Leinwand') : nb.mode === 'schematic' ? `${n} Blatt` : `${n} ${n === 1 ? 'Seite' : 'Seiten'}`}`;
+      `${relTime(nb.updated)} · ${nb.mode === 'canvas' ? (ns > 1 ? `${ns} Leinwände` : 'Leinwand') : nb.mode === 'schematic' || nb.mode === 'install' ? `${n} Blatt` : `${n} ${n === 1 ? 'Seite' : 'Seiten'}`}`;
     const card = el('div', { class: 'card nb', tabindex: '0', dataset: { id: nb.id } }, cover,
       el('div', { class: 'card-meta' },
         el('div', { class: 'card-name' }, nb.fav ? el('span', { class: 'fav', html: icon('star2') }) : null, nb.name),
@@ -435,8 +435,8 @@ export class Library {
     }));
     const schField = field('Blattgröße', schSize, 'Mit Rahmen, Spalteneinteilung für Querverweise und Schriftfeld.');
     const drawTpl = () => {
-      tplBox.hidden = o.mode === 'schematic';
-      schField.hidden = o.mode !== 'schematic';
+      tplBox.hidden = o.mode === 'schematic' || o.mode === 'install';
+      schField.hidden = o.mode !== 'schematic' && o.mode !== 'install';
       const allowed = o.mode === 'canvas' ? ['blank', 'lined', 'grid', 'dots'] : null;
       if (allowed && !allowed.includes(o.template)) o.template = 'dots';
       const tpl = templatePicker(o.template, o.paper, (v) => { o.template = v; }, allowed);
@@ -452,7 +452,8 @@ export class Library {
     const modes = el('div', { class: 'mode-cards' },
       modeCard('pages', 'pages', 'Buch mit Seiten', 'Wie ein Heft – Seite für Seite, auch PDFs'),
       modeCard('canvas', 'canvas', 'Unendliche Leinwand', 'Grenzenlos in alle Richtungen – für Mindmaps & Skizzen'),
-      modeCard('schematic', 'circuit', 'Stromlaufplan', 'Schaltplan nach IEC 60617 – mit BMK, Kontaktspiegel & Stückliste'));
+      modeCard('schematic', 'circuit', 'Stromlaufplan', 'Schaltplan nach IEC 60617 – mit BMK, Kontaktspiegel & Stückliste'),
+      modeCard('install', 'layout', 'Installationsplan', 'Grundriss mit Wänden, Steckdosen, Schaltern, Leuchten & Leitungen'));
     const whereBtn = el('button', { class: 'where-btn', type: 'button' });
     const drawWhere = () => { const f = o.parent && this.get(o.parent); whereBtn.innerHTML = icon(f ? 'folder' : 'network') + '<span></span>' + icon('chevronDown'); whereBtn.querySelector('span').textContent = f ? f.name : 'Meine Welt'; };
     whereBtn.addEventListener('click', async () => {
@@ -475,7 +476,7 @@ export class Library {
     if (!r) return;
     const nm = name.value.trim() || `Buch ${new Date().toLocaleDateString('de-DE')}`;
     saveSettings({ lastNew: { color: o.color, template: o.template, paper: o.paper, format: o.format, mode: o.mode } });
-    const nb = await store.createNotebook({ ...o, name: nm, format: o.mode === 'schematic' ? (o.schSize || 'A4') : o.format });
+    const nb = await store.createNotebook({ ...o, name: nm, format: o.mode === 'schematic' || o.mode === 'install' ? (o.schSize || 'A4') : o.format });
     await this.app.openNotebook(nb.id);
   }
 
@@ -513,7 +514,7 @@ export class Library {
   }
 
   async exportPdf(nb) {
-    if (nb.mode === 'schematic') { await this.app.openNotebook(nb.id); this.app.sch.exportPdf(); return; }
+    if (nb.mode === 'schematic' || nb.mode === 'install') { await this.app.openNotebook(nb.id); this.app.sch.exportPdf(); return; }
     const prog = progress('PDF wird erstellt');
     try {
       const data = await store.loadNotebook(nb.id);
