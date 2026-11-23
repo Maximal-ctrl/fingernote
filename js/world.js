@@ -14,6 +14,7 @@ const RING = 200;
 const ICON = {
   folder: 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z',
   pages: 'M7 3h11a2 2 0 012 2v12a2 2 0 01-2 2H7zM4 7v12a2 2 0 002 2h10',
+  schematic: 'M3 12h4l2-5 3 10 2-5h7',
   canvas: 'M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2zM7 15c2-4 4 1 6-2s3-4 4-3',
 };
 
@@ -96,7 +97,7 @@ export class World {
       const grp = sv('g', { class: `wnode ${folder ? 'folder' : 'book'}`, 'data-id': it.id, transform: `translate(${n.x} ${n.y})` });
       if (folder) grp.append(sv('rect', { x: -30, y: -30, width: 60, height: 60, rx: 18, class: 'nbg', style: `--c:${it.color || '#64748b'}` }));
       else grp.append(sv('circle', { r: 30, class: 'nbg', style: `--c:${it.color || '#6a5cff'}` }));
-      const ic = sv('g', { transform: 'translate(-12 -12)', class: 'nicon' }, sv('path', { d: folder ? ICON.folder : it.mode === 'canvas' ? ICON.canvas : ICON.pages }));
+      const ic = sv('g', { transform: 'translate(-12 -12)', class: 'nicon' }, sv('path', { d: folder ? ICON.folder : it.mode === 'canvas' ? ICON.canvas : it.mode === 'schematic' ? ICON.schematic : ICON.pages }));
       grp.append(ic);
       if (it.fav) grp.append(sv('circle', { cx: 22, cy: -22, r: 7, class: 'nfav' }));
       grp.append(sv('text', { class: 'wlabel', y: 50, 'text-anchor': 'middle' }, document.createTextNode(short(it.name))));

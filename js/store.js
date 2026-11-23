@@ -38,7 +38,12 @@ export async function createNotebook({ name, parent = null, color = COVER_COLORS
     created: now, updated: now, deleted: null, fav: false,
     defaults: { template, paper, format }, pages: [], thumb: null, idx: [], sections: [sec],
   };
-  const pageObjs = pages || [newPage(nb.id, { template, paper, format, infinite: mode === 'canvas' })];
+  const pageObjs = pages || [newPage(nb.id, { template: mode === 'schematic' ? 'blank' : template, paper, format, infinite: mode === 'canvas' })];
+  if (mode === 'schematic') {
+    nb.schSize = format === 'A3' ? 'A3' : 'A4';
+    nb.schMeta = { project: nb.name, author: '', company: '' };
+    pageObjs.forEach((p, i) => { p.sch = p.sch || { size: nb.schSize, parts: [], wires: [], texts: [], meta: { title: i ? `Blatt ${i + 1}` : 'Hauptstromkreis', date: new Date().toLocaleDateString('de-DE'), rev: '' } }; });
+  }
   for (const p of pageObjs) { p.nb = nb.id; p.sec = sec.id; }
   nb.pages = pageObjs.map((p) => p.id);
   await db.batch([{ store: 'items', put: nb }, ...pageObjs.map((p) => ({ store: 'pages', put: p }))]);

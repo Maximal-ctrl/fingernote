@@ -143,6 +143,7 @@ function pwField(placeholder, autocomplete) {
 export function showLogin({ canRestore = false, notice = '' } = {}) {
   const root = document.getElementById('login');
   root.hidden = false;
+  window.fingernoteStarted = true;
   return new Promise((resolve) => {
     let fails = 0, lockedUntil = 0;
     const finish = (v) => {

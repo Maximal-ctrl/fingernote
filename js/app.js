@@ -3,6 +3,7 @@ import { applyTheme, getSettings, saveSettings } from './util.js';
 import * as store from './store.js';
 import { Library } from './library.js';
 import { Editor } from './editor.js';
+import { SchematicEditor } from './schematic.js';
 import { toast } from './ui.js';
 import * as accounts from './accounts.js';
 import * as od from './onedrive.js';
@@ -75,7 +76,9 @@ class App {
 
     this.library = new Library(this);
     this.editor = new Editor(this);
+    this.sch = new SchematicEditor(this);
     this.libEl.hidden = false;
+    window.fingernoteStarted = true;
     await this.library.refresh();
     od.startAutoSync();
 
@@ -94,11 +97,12 @@ class App {
     }
 
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden' && this.editor.isOpen) this.rememberPage();
+      if (document.visibilityState === 'hidden' && (this.editor.isOpen || this.sch.isOpen)) this.rememberPage();
     });
   }
 
   rememberPage() {
+    if (this.sch.isOpen) { localStorage.setItem(accounts.accountKey('last'), JSON.stringify({ nb: this.sch.nb.id, page: this.sch.pages[this.sch.idx].id })); return; }
     const ed = this.editor;
     if (!ed.isOpen || !ed.nb) return;
     const p = ed.pages[ed.currentIndex()];
@@ -106,6 +110,14 @@ class App {
   }
 
   async openNotebook(id, pageId) {
+    const item = await store.getItem(id);
+    if (item && item.mode === 'schematic') {
+      this.libEl.hidden = true;
+      const ok = await this.sch.open(id, pageId);
+      if (!ok) { this.libEl.hidden = false; return false; }
+      localStorage.setItem(accounts.accountKey('last'), JSON.stringify({ nb: id, page: pageId || null }));
+      return true;
+    }
     this.libEl.hidden = true;
     this.edEl.hidden = false;
     const ok = await this.editor.open(id, pageId);
@@ -119,16 +131,19 @@ class App {
   }
 
   async closeEditor() {
-    await this.editor.close();
+    if (this.sch.isOpen) await this.sch.close();
+    if (this.editor.isOpen) await this.editor.close();
     localStorage.removeItem(accounts.accountKey('last'));
     this.edEl.hidden = true;
     this.libEl.hidden = false;
+    window.fingernoteStarted = true;
     await this.library.refresh();
   }
 
   /** Abmelden: offenes Buch speichern, dann Anmeldebildschirm. */
   async lock() {
     if (this.editor && this.editor.isOpen) await this.editor.close();
+    if (this.sch && this.sch.isOpen) await this.sch.close();
     accounts.logout();
   }
 }

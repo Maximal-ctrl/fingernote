@@ -75,7 +75,7 @@ function pdfHexString(str) {
 }
 
 /** imgs: [{bytes: Uint8Array (JPEG), pxW, pxH, ptW, ptH}] */
-function buildPdf(imgs, title) {
+export function buildPdf(imgs, title) {
   const chunks = [];
   let offset = 0;
   const offsets = [];

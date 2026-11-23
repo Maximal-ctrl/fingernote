@@ -11,8 +11,9 @@
     Promise.all(jobs).catch(function () {}).then(function () { location.replace(location.pathname + '?r=' + Date.now()); });
   }
   function show(msg) {
-    if (shown) return;
-    if (document.querySelector('#login:not([hidden]) .login-card, #library:not([hidden]) .lib-h1, #editor:not([hidden]) .ed-stage')) return;
+    // Sobald die App gestartet ist (Anmeldebildschirm oder Bibliothek sichtbar), nie mehr eingreifen
+    if (shown || window.fingernoteStarted) return;
+    if (document.querySelector('#login:not([hidden]) .login-card, #library:not([hidden]) .lib-h1, #editor:not([hidden]) .ed-stage, #schematic:not([hidden]) canvas')) { window.fingernoteStarted = true; return; }
     shown = true;
     var box = document.createElement('div');
     box.className = 'boot-fail';

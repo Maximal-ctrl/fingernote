@@ -79,6 +79,12 @@ const P = {
   chapter: '<path d="M6 3h11a2 2 0 012 2v16l-4-3-4 3V5" /><path d="M6 3a2 2 0 00-2 2v14" />',
   star2: '<path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z" fill="currentColor"/>',
   scribble: '<path d="M3 15c3-6 4 4 7-2s4 4 7-2 3 2 4 1"/>',
+  cursor: '<path d="M5 3l14 7.5-6.2 1.7L10 18.5z"/>',
+  wire: '<circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M7 19h5V5h5"/>',
+  tag: '<path d="M3 12V5a2 2 0 012-2h7l9 9-9 9z"/><circle cx="8" cy="8" r="1.5"/>',
+  flip: '<path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 6L4 18h5zM15 6l5 12h-5z"/>',
+  checkCircle: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/>',
+  circuit: '<path d="M3 12h4l2-5 3 10 2-5h7"/><circle cx="3" cy="12" r="1"/><circle cx="21" cy="12" r="1"/>',
   rotate: '<path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
 };
 

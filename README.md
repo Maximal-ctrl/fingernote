@@ -1,4 +1,4 @@
-# FingerNote 2.0
+# FingerNote 2.1
 
 Handschriftliche Notizen auf dem iPad – mit dem **Finger** oder dem **Apple Pencil**.
 Schlicht, modern, offline. Kein Abo, keine Werbung.
@@ -15,6 +15,12 @@ Schlicht, modern, offline. Kein Abo, keine Werbung.
 - **Meine Welt:** alle Ordner und Bücher als Netzwerk rund um dich – antippen, bewegen, zoomen
 - **Ordner** (beliebig verschachtelt) und **Bücher** – wahlweise **mit Seiten** oder als **unendliche Leinwand**
 - **Kapitel** in jedem Buch (wie Abschnitte in OneNote), Seiten zwischen Kapiteln verschiebbar
+- **Stromlaufplan-Editor** (neue Buchart): Symbole nach IEC 60617 (Kontakte, Taster, Schütze, Zeitrelais,
+  Sicherungen, Motoren, Leuchten, Halbleiter, Quellen …), Blätter A4/A3 mit Spalten und Schriftfeld,
+  Verdrahtung im 5-mm-Raster (antippen oder mit dem Stift ziehen), Leitungen bleiben beim Verschieben verbunden,
+  Verbindungspunkte nur an T-Abzweigen, **automatische BMK** (-K1, -S2 …), **Kontaktspiegel** und **Querverweise**
+  (/Blatt.Spalte), Potentiale (L1, N, PE, +24V – auch über Blätter), **Planprüfung**,
+  Export als PDF, SVG, PNG, **Stückliste**, **Netzliste** und **Klemmenplan** (CSV)
 - **PDFs** als Buch importieren oder in ein Buch einfügen – jede Seite direkt beschreibbar
 - **Bilder** einfügen, **sperren**, **vor oder hinter den Text** legen
 - Stift (druckempfindlich), Fineliner, Regenbogen, **Lieblingsstifte**, **Pipette**

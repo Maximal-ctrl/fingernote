@@ -200,7 +200,7 @@ export class Library {
   /** Fehlende Vorschaubilder im Hintergrund erzeugen. */
   async fillThumbs(list) {
     for (const nb of list) {
-      if (nb.kind !== 'notebook' || nb.thumb || nb.deleted) continue;
+      if (nb.kind !== 'notebook' || nb.thumb || nb.deleted || nb.mode === 'schematic') continue;
       try {
         const data = await store.loadNotebook(nb.id);
         if (!data) continue;
@@ -271,11 +271,11 @@ export class Library {
     if (nb.thumb) cover.append(el('img', { src: nb.thumb, alt: '', draggable: 'false' }));
     else cover.append(el('div', { class: 'cover-blank' }));
     cover.append(el('span', { class: 'spine' }),
-      el('span', { class: 'mode-badge', html: icon(nb.mode === 'canvas' ? 'canvas' : 'pages') + `<span>${nb.mode === 'canvas' ? 'Leinwand' : 'Seiten'}</span>` }));
+      el('span', { class: 'mode-badge', html: icon(nb.mode === 'canvas' ? 'canvas' : nb.mode === 'schematic' ? 'circuit' : 'pages') + `<span>${nb.mode === 'canvas' ? 'Leinwand' : nb.mode === 'schematic' ? 'Stromlaufplan' : 'Seiten'}</span>` }));
     const n = (nb.pages || []).length;
     const ns = (nb.sections || []).length;
     const sub = this.tab === 'trash' ? `gelöscht ${relTime(nb.deleted)}` :
-      `${relTime(nb.updated)} · ${nb.mode === 'canvas' ? (ns > 1 ? `${ns} Leinwände` : 'Leinwand') : `${n} ${n === 1 ? 'Seite' : 'Seiten'}`}`;
+      `${relTime(nb.updated)} · ${nb.mode === 'canvas' ? (ns > 1 ? `${ns} Leinwände` : 'Leinwand') : nb.mode === 'schematic' ? `${n} Blatt` : `${n} ${n === 1 ? 'Seite' : 'Seiten'}`}`;
     const card = el('div', { class: 'card nb', tabindex: '0', dataset: { id: nb.id } }, cover,
       el('div', { class: 'card-meta' },
         el('div', { class: 'card-name' }, nb.fav ? el('span', { class: 'fav', html: icon('star2') }) : null, nb.name),
@@ -428,12 +428,20 @@ export class Library {
     const name = el('input', { class: 'inp', type: 'text', placeholder: 'Buchname', autocomplete: 'off', autocapitalize: 'sentences' });
     const tplBox = el('div');
     const fmtField = field('Format', formatPicker(o.format, (v) => { o.format = v; }), 'Endlos: Die Seite wächst beim Schreiben nach unten.');
+    const schSize = el('div', { class: 'seg' }, ['A4', 'A3'].map((k) => {
+      const b = el('button', { type: 'button', class: (o.schSize || 'A4') === k ? 'on' : '' }, `${k} quer`);
+      b.addEventListener('click', () => { o.schSize = k; schSize.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); });
+      return b;
+    }));
+    const schField = field('Blattgröße', schSize, 'Mit Rahmen, Spalteneinteilung für Querverweise und Schriftfeld.');
     const drawTpl = () => {
+      tplBox.hidden = o.mode === 'schematic';
+      schField.hidden = o.mode !== 'schematic';
       const allowed = o.mode === 'canvas' ? ['blank', 'lined', 'grid', 'dots'] : null;
       if (allowed && !allowed.includes(o.template)) o.template = 'dots';
       const tpl = templatePicker(o.template, o.paper, (v) => { o.template = v; }, allowed);
       tplBox.replaceChildren(field(o.mode === 'canvas' ? 'Muster' : 'Vorlage', tpl), field('Papier', paperPicker(o.paper, (v) => { o.paper = v; tpl.setPaper(v); })));
-      fmtField.hidden = o.mode === 'canvas';
+      fmtField.hidden = o.mode !== 'pages';
     };
     const modeCard = (k, ic, title, sub) => {
       const b = el('button', { class: `mode-card ${o.mode === k ? 'on' : ''}`, type: 'button' },
@@ -443,7 +451,8 @@ export class Library {
     };
     const modes = el('div', { class: 'mode-cards' },
       modeCard('pages', 'pages', 'Buch mit Seiten', 'Wie ein Heft – Seite für Seite, auch PDFs'),
-      modeCard('canvas', 'canvas', 'Unendliche Leinwand', 'Grenzenlos in alle Richtungen – für Mindmaps & Skizzen'));
+      modeCard('canvas', 'canvas', 'Unendliche Leinwand', 'Grenzenlos in alle Richtungen – für Mindmaps & Skizzen'),
+      modeCard('schematic', 'circuit', 'Stromlaufplan', 'Schaltplan nach IEC 60617 – mit BMK, Kontaktspiegel & Stückliste'));
     const whereBtn = el('button', { class: 'where-btn', type: 'button' });
     const drawWhere = () => { const f = o.parent && this.get(o.parent); whereBtn.innerHTML = icon(f ? 'folder' : 'network') + '<span></span>' + icon('chevronDown'); whereBtn.querySelector('span').textContent = f ? f.name : 'Meine Welt'; };
     whereBtn.addEventListener('click', async () => {
@@ -457,7 +466,7 @@ export class Library {
     const body = el('div', { class: 'new-nb' },
       field('Name', name), modes,
       el('div', { class: 'field-row' }, field('Farbe', colorRow(store.COVER_COLORS, o.color, (v) => { o.color = v; })), field('Ort', whereBtn)),
-      tplBox, fmtField);
+      tplBox, fmtField, schField);
     const r = await dialog({
       title: 'Neues Buch', body, wide: true,
       buttons: [{ label: 'Abbrechen', value: null }, { label: 'Erstellen', value: true, primary: true }],
@@ -466,7 +475,7 @@ export class Library {
     if (!r) return;
     const nm = name.value.trim() || `Buch ${new Date().toLocaleDateString('de-DE')}`;
     saveSettings({ lastNew: { color: o.color, template: o.template, paper: o.paper, format: o.format, mode: o.mode } });
-    const nb = await store.createNotebook({ ...o, name: nm });
+    const nb = await store.createNotebook({ ...o, name: nm, format: o.mode === 'schematic' ? (o.schSize || 'A4') : o.format });
     await this.app.openNotebook(nb.id);
   }
 
@@ -504,6 +513,7 @@ export class Library {
   }
 
   async exportPdf(nb) {
+    if (nb.mode === 'schematic') { await this.app.openNotebook(nb.id); this.app.sch.exportPdf(); return; }
     const prog = progress('PDF wird erstellt');
     try {
       const data = await store.loadNotebook(nb.id);
