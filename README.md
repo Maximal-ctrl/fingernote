@@ -43,6 +43,8 @@ Schlicht, modern, offline. Kein Abo, keine Werbung.
   roter Nullpunkt als Drehpunkt (↺/↻ 120° und 30°, rastet alle 15° ein, „⤳ Ende“) – ideal für
   Stern/Dreieck und Zeigerdiagramme; Linien rasten auf ganze mm und an Linienenden ein,
   die **Länge in cm** und der Winkel werden beim Zeichnen angezeigt
+- **Messen** (Lineal-Leiste „📏 Messen“): Punkt A und B antippen oder ziehen → Abstand in cm, Winkel,
+  waagerechter und senkrechter Anteil; „Enden: an“ rastet an Linienenden und Ecken ein
 - **Dunkle Seiten** im Dunkelmodus, Vollbild-Schreiben, Gesten (2/3 Finger tippen = Rückgängig/Wiederholen)
 - **OneDrive-Sicherung** (automatisch, sobald online) und Sicherung als Datei
 - Export als PDF, Bild oder FingerNote-Datei

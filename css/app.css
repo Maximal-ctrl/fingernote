@@ -368,6 +368,10 @@ input, textarea { font: inherit; color: inherit; -webkit-user-select: text; user
 .ruler-bar { position: absolute; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 2px; padding: 5px; border-radius: 16px; max-width: calc(100% - 24px); overflow-x: auto; }
 .ruler-bar .rb { border: 0; background: transparent; color: var(--text); font: 650 13px var(--font); padding: 8px 10px; border-radius: 11px; white-space: nowrap; cursor: pointer; font-variant-numeric: tabular-nums; }
 .ruler-bar .rb:active { background: var(--hover, rgba(127,127,127,.18)); }
+.ruler-bar .rb-seg { display: flex; gap: 2px; padding: 2px; border-radius: 13px; background: rgba(127,127,127,.14); }
+.ruler-bar .rb.on { background: var(--text); color: var(--bg, #fff); }
+.ruler-bar .rb-ends.on { background: transparent; color: #30b158; }
+.ruler-bar .rb-seg + .rb { margin-left: 4px; }
 .ruler-bar .rb-sep { width: 1px; align-self: stretch; margin: 4px 3px; background: rgba(127,127,127,.3); }
 .measure { position: absolute; left: 0; top: 0; z-index: 5; pointer-events: none; display: flex; align-items: baseline; gap: 7px; padding: 6px 12px; border-radius: 999px; background: rgba(20, 20, 26, 0.86); color: #fff; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
 .measure b { font-weight: 700; }

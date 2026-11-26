@@ -617,6 +617,8 @@ export class Editor {
       this.action.drawLive(ctx);
       ctx.restore();
     }
+    if (this.ruler.visible && this.ruler.meas) { ctx.save(); this.ruler.drawMeasure(ctx); ctx.restore(); }
+    else if (this.ruler.measuring) this.hideMeasure();
     this.drawSelectionBox(ctx);
     if (this.laser.length) this.drawLaser(ctx);
     if (this.hover) this.drawCursor(ctx);
@@ -1500,6 +1502,7 @@ export class Editor {
     if (touches.length === 1) {
       this.tap = { t0: pt.t, max: 1, moved: false, x: pt.sx, y: pt.sy, pan: false };
       if (this.ruler.visible && this.ruler.hit(pt.sx, pt.sy)) { this.mode = 'ruler'; this.ruler.begin(touches); return; }
+      if (this.ruler.visible && this.ruler.measuring) { this.beginTool(pt, e); return; }
       if (this.selection && this.selHit(pt.sx, pt.sy)) { this.beginTool(pt, e); return; }
       if (this.fingerDraws() && FINGER_TOOLS.has(this.tool)) { this.beginTool(pt, e); return; }
       this.tap.pan = true;

@@ -26,8 +26,18 @@ export class Ruler {
     this.g = null;
     this.lastEnd = null;
     this.paintKey = '';
+    this.measuring = false; // Leiste: Zeichnen ↔ Messen
+    this.snapEnds = true;   // beim Messen an Linienenden einrasten
+    this.meas = null;       // { id, a:{x,y}, b:{x,y}|null } in Seitenkoordinaten
     const b = (txt, title, fn) => el('button', { class: 'rb', title, 'aria-label': title, onclick: (e) => { e.stopPropagation(); fn(); } }, txt);
+    this.modeDraw = b('✎ Zeichnen', 'Am Lineal zeichnen', () => this.setMeasuring(false));
+    this.modeMeas = b('📏 Messen', 'Abstand zwischen zwei Punkten messen', () => this.setMeasuring(true));
+    this.endsBtn = b('', 'Beim Messen an Linienenden einrasten', () => { this.snapEnds = !this.snapEnds; this.syncBar(); });
+    this.endsBtn.classList.add('rb-ends');
     this.bar = el('div', { class: 'ruler-bar glass', hidden: true },
+      el('span', { class: 'rb-seg' }, this.modeDraw, this.modeMeas),
+      this.endsBtn,
+      el('span', { class: 'rb-sep' }),
       b('↺ 120°', 'Um den Nullpunkt 120° nach links drehen', () => this.rotateBy(-120)),
       b('↺ 30°', 'Um den Nullpunkt 30° nach links drehen', () => this.rotateBy(-30)),
       b('0°', 'Waagerecht ausrichten', () => this.rotateBy(-this.angle)),
@@ -37,6 +47,80 @@ export class Ruler {
       b('⤳ Ende', 'Nullpunkt an das Ende der letzten Linie setzen', () => this.toLastEnd()),
       b('⇅ Kante', 'Messkante wechseln (oben/unten)', () => { this.setEdge(this.edge === 'top' ? 'bottom' : 'top'); }));
     elm.parentNode.append(this.bar);
+    this.syncBar();
+  }
+
+  syncBar() {
+    this.modeDraw.classList.toggle('on', !this.measuring);
+    this.modeMeas.classList.toggle('on', this.measuring);
+    this.endsBtn.hidden = !this.measuring;
+    this.endsBtn.textContent = this.snapEnds ? '◉ Enden: an' : '○ Enden: aus';
+    this.endsBtn.classList.toggle('on', this.snapEnds);
+  }
+
+  setMeasuring(on) {
+    this.measuring = on;
+    if (!on) { this.meas = null; this.ed.hideMeasure(); }
+    else toast('Messen: ersten Punkt antippen, dann den zweiten – oder von Punkt zu Punkt ziehen');
+    this.syncBar();
+    this.ed.requestLive();
+  }
+
+  /** Punkt zum Messen: rastet (wenn „Enden: an“) an Linienenden und Ecken ein. */
+  snapPoint(L, sx, sy) {
+    const p0 = this.ed.toPage(L, sx, sy);
+    if (!this.snapEnds) return p0;
+    let best = null, bd = 18;
+    const test = (x, y) => {
+      const s = this.ed.toScreen(L, x, y);
+      const d = Math.hypot(s.sx - sx, s.sy - sy);
+      if (d < bd) { bd = d; best = { x, y, snap: true }; }
+    };
+    for (const st of L.page.strokes) {
+      const p = st.pts;
+      if (!p || p.length < 3) continue;
+      if (st.sh) { for (let i = 0; i < p.length; i += 3) test(p[i], p[i + 1]); } // Formen: alle Ecken
+      else { test(p[0], p[1]); test(p[p.length - 3], p[p.length - 2]); }
+    }
+    return best || p0;
+  }
+
+  /** Messung auf die Live-Ebene zeichnen (Bildschirmkoordinaten). */
+  drawMeasure(ctx) {
+    const m = this.meas;
+    const L = m && this.ed.layout.find((l) => l.page.id === m.id);
+    if (!L) { this.ed.hideMeasure(); return; }
+    const d = this.ed.dpr;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    const A = this.ed.toScreen(L, m.a.x, m.a.y);
+    const col = '#0a84ff';
+    const dot = (P, snap) => {
+      ctx.beginPath(); ctx.arc(P.sx, P.sy, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff'; ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = snap ? '#30b158' : col; ctx.stroke();
+      ctx.beginPath(); ctx.arc(P.sx, P.sy, 2, 0, Math.PI * 2); ctx.fillStyle = snap ? '#30b158' : col; ctx.fill();
+    };
+    // Beschriftung als Element über dem Lineal (sonst läge sie darunter)
+    const pill = (x, y, main, sub) => this.ed.showMeasure(x, y, main, sub);
+    if (!m.b) {
+      dot(A, m.a.snap);
+      pill(A.sx, A.sy, 'Punkt A', '2. Punkt antippen');
+      return;
+    }
+    const B = this.ed.toScreen(L, m.b.x, m.b.y);
+    ctx.setLineDash([7, 5]);
+    ctx.lineWidth = 2; ctx.strokeStyle = col;
+    ctx.beginPath(); ctx.moveTo(A.sx, A.sy); ctx.lineTo(B.sx, B.sy); ctx.stroke();
+    ctx.setLineDash([]);
+    dot(A, m.a.snap); dot(B, m.b.snap);
+    const dx = m.b.x - m.a.x, dy = m.b.y - m.a.y;
+    const cm = Math.hypot(dx, dy) / MM / 10;
+    let ang = Math.round((Math.atan2(-dy, dx) * 180) / Math.PI);
+    if (ang < 0) ang += 360;
+    const f = (v) => v.toFixed(Math.abs(v) < 10 ? 2 : 1).replace('.', ',');
+    const sub = `${ang}° · ↔ ${f(Math.abs(dx) / MM / 10)} · ↕ ${f(Math.abs(dy) / MM / 10)}`;
+    const mx = (A.sx + B.sx) / 2, my = (A.sy + B.sy) / 2;
+    pill(mx, my, `${f(cm)} cm`, sub);
   }
 
   toggle() { if (this.visible) this.hide(); else this.show(); }
@@ -52,6 +136,7 @@ export class Ruler {
 
   hide() {
     this.visible = false;
+    if (this.measuring) { this.measuring = false; this.meas = null; this.syncBar(); this.ed.hideMeasure(); this.ed.requestLive(); }
     this.el.hidden = true;
     this.bar.hidden = true;
     this.ed.ui.updateRuler();

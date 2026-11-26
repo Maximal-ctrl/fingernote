@@ -413,7 +413,47 @@ class TapAction {
   small() { return true; }
 }
 
+// ---------------------------------------------------------------- Messen (Lineal-Leiste „Messen“)
+// Punkt A antippen, Punkt B antippen – oder von A nach B ziehen. Optional rasten die Punkte an Linienenden ein.
+class MeasureAction {
+  constructor(ed, pt) {
+    this.ed = ed;
+    this.R = ed.ruler;
+    this.x0 = pt.sx; this.y0 = pt.sy; this.travel = 0;
+    const m = this.R.meas;
+    const L = m && !m.b && ed.layout.find((l) => l.page.id === m.id);
+    if (L) { this.L = L; this.second = true; this.prev = m; this.R.meas = { ...m, b: this.R.snapPoint(L, pt.sx, pt.sy) }; }
+    else {
+      const hit = ed.hitPage(pt.sx, pt.sy, 0);
+      if (!hit) { this.dead = true; return; }
+      this.L = hit.L;
+      this.prev = m;
+      this.R.meas = { id: hit.L.page.id, a: this.R.snapPoint(hit.L, pt.sx, pt.sy), b: null };
+    }
+    ed.requestLive();
+  }
+
+  move(list) {
+    if (this.dead) return;
+    const pt = list[list.length - 1];
+    this.travel = Math.max(this.travel, Math.hypot(pt.sx - this.x0, pt.sy - this.y0));
+    if (this.second || this.travel > 8) this.R.meas.b = this.R.snapPoint(this.L, pt.sx, pt.sy);
+  }
+
+  end(pt) {
+    if (this.dead) return;
+    if (pt && pt.sx != null && (this.second || this.travel > 8)) this.R.meas.b = this.R.snapPoint(this.L, pt.sx, pt.sy);
+    else this.R.meas.b = null; // nur Punkt A gesetzt – jetzt Punkt B antippen
+    this.ed.requestLive();
+  }
+
+  cancel() { if (!this.dead) this.R.meas = this.prev || null; this.ed.requestLive(); }
+  small() { return this.travel < 12; }
+  drawLive() { /* Lineal zeichnet die Messung */ }
+}
+
 export function createAction(ed, toolName, pt) {
+  if (ed.ruler.visible && ed.ruler.measuring) return new MeasureAction(ed, pt);
   const sel = ed.selection;
   if (sel) {
     const h = ed.selHit(pt.sx, pt.sy);
