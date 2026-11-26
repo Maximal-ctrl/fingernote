@@ -6,6 +6,9 @@ import { clamp } from './util.js';
 
 export const PAGE_W = 1000;
 export const A4_H = 1414;
+/** Seiten-Einheiten pro Millimeter (A4 = 210 mm breit). 2 Kästchen = 1 cm. */
+export const MM = PAGE_W / 210;
+const BOX = MM * 5;
 
 export const PAPERS = {
   white: { bg: '#ffffff', line: 'rgba(60,95,140,0.22)', strong: 'rgba(60,95,140,0.42)', label: 'Weiß' },
@@ -64,7 +67,7 @@ export function drawPaper(ctx, page, vis) {
       break;
     }
     case 'grid': {
-      const sp = 25, ox = (W % sp) / 2, oy = (H % sp) / 2;
+      const sp = BOX, ox = (W % sp) / 2, oy = (H % sp) / 2;
       ctx.lineWidth = lw(0.8);
       ctx.beginPath();
       for (let x = ox + Math.max(0, Math.floor((x0 - ox) / sp)) * sp; x <= x1; x += sp) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
@@ -73,7 +76,7 @@ export function drawPaper(ctx, page, vis) {
       break;
     }
     case 'dots': {
-      const sp = 25, ox = (W % sp) / 2, oy = (H % sp) / 2;
+      const sp = BOX, ox = (W % sp) / 2, oy = (H % sp) / 2;
       ctx.fillStyle = P.strong;
       const dr = Math.max(1.5, 0.7 / k);
       ctx.beginPath();
@@ -124,7 +127,7 @@ function drawInfinitePaper(ctx, page, vis) {
   ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
   const k = ctx.getTransform ? Math.abs(ctx.getTransform().a) || 1 : 1;
   // bei starkem Herauszoomen Muster ausdünnen
-  let sp = page.template === 'lined' ? 34 : 25;
+  let sp = page.template === 'lined' ? 34 : BOX;
   while (sp * k < 7) sp *= 2;
   ctx.strokeStyle = P.line;
   ctx.lineWidth = Math.max(0.8, 0.85 / k);

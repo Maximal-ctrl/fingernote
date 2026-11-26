@@ -1,6 +1,6 @@
 // Werkzeug-Aktionen: jede Berührung erzeugt eine Aktion mit move/end/cancel/drawLive.
 import { uid, round2, getSettings } from './util.js';
-import { drawStroke, drawText, strokeHit, geom, textAt, checkboxAt, pointInPoly, textHeight, getImage } from './ink.js';
+import { MM, drawStroke, drawText, strokeHit, geom, textAt, checkboxAt, pointInPoly, textHeight, getImage } from './ink.js';
 import { recognize } from './shapes.js';
 
 // ---------------------------------------------------------------- Stift, Textmarker, Formen, Lernband
@@ -32,7 +32,13 @@ class InkAction {
 
   add(pt) {
     let sx = pt.sx, sy = pt.sy;
-    if (this.ruler) [sx, sy] = this.ed.ruler.project(this.ruler, sx, sy);
+    if (this.ruler) {
+      const R = this.ed.ruler;
+      let lx = R.local(sx, sy)[0];
+      if (this.rl0 == null) { lx = R.snapStart(this.ruler, lx, this.L); this.rl0 = lx; }
+      else lx = R.snapEnd(this.ruler, lx, this.rl0);
+      [sx, sy] = R.projectLx(this.ruler, lx);
+    }
     const { x, y } = this.ed.toPage(this.L, sx, sy);
     const pts = this.stroke.pts;
     const n = pts.length;
@@ -47,6 +53,18 @@ class InkAction {
       if (dx * dx + dy * dy < min * min) { pts[n - 1] = round2(Math.max(pts[n - 1], pt.p)); return; }
     }
     pts.push(round2(x), round2(y), round2(pt.p));
+  }
+
+  /** Gerade Linie: Länge in cm (und Richtung) über dem Stift anzeigen. */
+  showLength(pt) {
+    const p = this.stroke.pts;
+    if (!(this.straight || this.shaped === 'line') || p.length < 6) return;
+    const dx = p[3] - p[0], dy = p[4] - p[1];
+    const cm = Math.hypot(dx, dy) / MM / 10;
+    let a = Math.round((Math.atan2(-dy, dx) * 180) / Math.PI);
+    if (a < 0) a += 360;
+    const s = this.ed.toScreen(this.L, p[3], p[4]);
+    this.ed.showMeasure(s.sx, s.sy, `${cm.toFixed(cm < 10 ? 2 : 1).replace('.', ',')} cm`, `${a}°`);
   }
 
   armHold() {
@@ -76,10 +94,12 @@ class InkAction {
         if (this.shaped === 'line') {
           const { x, y } = this.ed.toPage(this.L, pt.sx, pt.sy);
           this.stroke.pts[3] = round2(x); this.stroke.pts[4] = round2(y);
+          this.showLength(pt);
         }
         continue;
       }
       this.add(pt);
+      this.showLength(pt);
       if (Math.hypot(pt.sx - this.anchor.x, pt.sy - this.anchor.y) > 5) {
         this.anchor = { x: pt.sx, y: pt.sy };
         this.armHold();
@@ -89,6 +109,7 @@ class InkAction {
 
   end(pt) {
     clearTimeout(this.holdT);
+    this.ed.hideMeasure();
     if (this.dead) return;
     const ed = this.ed;
     // Kurzes Antippen: Lernband umschalten oder Checkbox abhaken statt Punkt setzen
@@ -103,11 +124,12 @@ class InkAction {
     }
     if (this.straight) this.stroke.sh = true;
     if (!this.stroke.pts.length) return;
+    if (this.ruler && this.stroke.pts.length >= 6) { const q = this.stroke.pts; this.ed.ruler.noteLine(this.L, q[0], q[1], q[3], q[4]); }
     if (this.tool === 'pen' && !this.shaped && !this.straight && getSettings().scribbleErase && ed.scribbleErase(this.page, this.stroke)) return;
     ed.addStroke(this.page, this.stroke);
   }
 
-  cancel() { clearTimeout(this.holdT); this.dead = true; }
+  cancel() { clearTimeout(this.holdT); this.dead = true; this.ed.hideMeasure(); }
   small() { return this.travel < 12; }
 
   drawLive(ctx) {

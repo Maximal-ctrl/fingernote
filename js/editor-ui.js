@@ -44,7 +44,9 @@ export function showHelp() {
     ['Checkbox antippen', 'Abhaken'],
     ['Gesperrtes Bild mit dem Lasso antippen', 'Entsperren'],
     ['Farbe erneut antippen → Pipette', 'Farbe von der Seite aufnehmen'],
-    ['Lineal: 1 Finger / 2 Finger', 'Verschieben / Drehen (rastet bei 45° ein)'],
+    ['Lineal: 1 Finger / 2 Finger', 'Verschieben / Drehen (rastet alle 15° ein)'],
+    ['Lineal: roter Nullpunkt', 'Drehpunkt – mit ↺/↻ 120° Stern und Dreieck zeichnen, „⤳ Ende“ setzt ihn ans Linienende'],
+    ['Kariert / Punktiert', '2 Kästchen = 1 cm, Länge gerader Linien wird beim Zeichnen angezeigt'],
     ['Hand-Symbol oben rechts', 'Finger zeichnet ↔ Finger scrollt'],
   ];
   const keys = [

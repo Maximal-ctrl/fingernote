@@ -39,6 +39,10 @@ Schlicht, modern, offline. Kein Abo, keine Werbung.
 - Textmarker unter der Schrift, Formerkennung durch Halten, **Wegkritzeln zum Löschen**
 - Radierer (ganz/teilweise/nur Textmarker, springt auf Wunsch zum Stift zurück)
 - Lasso mit Filter (Schrift/Text/Bilder), Text mit Markdown und Checklisten, Lernband, Lineal, Laserpointer
+- **Kariert/Punktiert: 2 Kästchen = 1 cm**, **Lineal mit cm-Skala**, die beim Zoomen zur Seite passt;
+  roter Nullpunkt als Drehpunkt (↺/↻ 120° und 30°, rastet alle 15° ein, „⤳ Ende“) – ideal für
+  Stern/Dreieck und Zeigerdiagramme; Linien rasten auf ganze mm und an Linienenden ein,
+  die **Länge in cm** und der Winkel werden beim Zeichnen angezeigt
 - **Dunkle Seiten** im Dunkelmodus, Vollbild-Schreiben, Gesten (2/3 Finger tippen = Rückgängig/Wiederholen)
 - **OneDrive-Sicherung** (automatisch, sobald online) und Sicherung als Datei
 - Export als PDF, Bild oder FingerNote-Datei

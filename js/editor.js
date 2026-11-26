@@ -528,7 +528,21 @@ export class Editor {
     return c && c.ver === (p._v || 0) && c.w === p.w && c.h === p.h ? c : null;
   }
 
+  showMeasure(sx, sy, text, sub) {
+    if (!this.measureEl) {
+      this.measureEl = el('div', { class: 'measure' });
+      this.stage.append(this.measureEl);
+    }
+    const m = this.measureEl;
+    m.replaceChildren(el('b', null, text), sub ? el('span', null, sub) : null);
+    m.style.transform = `translate(${Math.round(sx)}px, ${Math.round(sy - 46)}px) translateX(-50%)`;
+    m.hidden = false;
+  }
+
+  hideMeasure() { if (this.measureEl) this.measureEl.hidden = true; }
+
   renderBase() {
+    if (this.ruler.visible) this.ruler.paint();
     const ctx = this.bctx, d = this.dpr, { tx, ty, s } = this.view;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = this.deskColor;

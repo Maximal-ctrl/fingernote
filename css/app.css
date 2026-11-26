@@ -359,17 +359,20 @@ input, textarea { font: inherit; color: inherit; -webkit-user-select: text; user
 
 .ruler {
   position: absolute; left: 0; top: 0; transform-origin: 50% 50%; pointer-events: none; z-index: 1;
-  background:
-    repeating-linear-gradient(90deg, rgba(0,0,0,.45) 0 1px, transparent 1px 10px) top left / 100% 10px no-repeat,
-    repeating-linear-gradient(90deg, rgba(0,0,0,.55) 0 1px, transparent 1px 50px) top left / 100% 18px no-repeat,
-    repeating-linear-gradient(90deg, rgba(0,0,0,.45) 0 1px, transparent 1px 10px) bottom left / 100% 10px no-repeat,
-    repeating-linear-gradient(90deg, rgba(0,0,0,.55) 0 1px, transparent 1px 50px) bottom left / 100% 18px no-repeat,
-    rgba(238, 240, 246, 0.62);
-  border-top: 1.5px solid rgba(0,0,0,.35); border-bottom: 1.5px solid rgba(0,0,0,.35);
+  background: rgba(238, 240, 246, 0.66);
+  border-top: 1.5px solid rgba(0,0,0,.4); border-bottom: 1.5px solid rgba(0,0,0,.4);
   -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
 }
-.ruler-angle { font-size: 15px; font-weight: 700; color: #222; background: rgba(255,255,255,.88); padding: 3px 10px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.ruler-scale { position: absolute; left: 0; top: 0; }
+.ruler-bar { position: absolute; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 2px; padding: 5px; border-radius: 16px; max-width: calc(100% - 24px); overflow-x: auto; }
+.ruler-bar .rb { border: 0; background: transparent; color: var(--text); font: 650 13px var(--font); padding: 8px 10px; border-radius: 11px; white-space: nowrap; cursor: pointer; font-variant-numeric: tabular-nums; }
+.ruler-bar .rb:active { background: var(--hover, rgba(127,127,127,.18)); }
+.ruler-bar .rb-sep { width: 1px; align-self: stretch; margin: 4px 3px; background: rgba(127,127,127,.3); }
+.measure { position: absolute; left: 0; top: 0; z-index: 5; pointer-events: none; display: flex; align-items: baseline; gap: 7px; padding: 6px 12px; border-radius: 999px; background: rgba(20, 20, 26, 0.86); color: #fff; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
+.measure b { font-weight: 700; }
+.measure span { font-size: 12px; opacity: .7; font-weight: 600; }
+.ruler-angle { position: relative; font-size: 15px; font-weight: 700; color: #222; background: rgba(255,255,255,.88); padding: 3px 10px; border-radius: 999px; font-variant-numeric: tabular-nums; }
 
 .text-edit {
   position: absolute; z-index: 4; margin: 0; padding: 0; border: 0; outline: 1.5px dashed var(--accent); outline-offset: 6px;
