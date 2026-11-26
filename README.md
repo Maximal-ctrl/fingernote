@@ -45,6 +45,10 @@ Schlicht, modern, offline. Kein Abo, keine Werbung.
   die **Länge in cm** und der Winkel werden beim Zeichnen angezeigt
 - **Messen** (Lineal-Leiste „📏 Messen“): Punkt A und B antippen oder ziehen → Abstand in cm, Winkel,
   waagerechter und senkrechter Anteil; „Enden: an“ rastet an Linienenden und Ecken ein
+- **Eigene Winkel** am Lineal (∠ Winkel: absolut oder +/− weiterdrehen), **⌖ Einrasten**: Nullpunkt springt auf ein
+  angetipptes Linienende (oder rastet beim Hinschieben ein) – von dort weiterzeichnen
+- **⚡ Zeigerdiagramm** Drehstrom: Stern (mit **N-Leiterstrom**) oder Dreieck (Leiterströme aus Strangströmen),
+  Strom und φ je Phase per Regler (induktiv/kapazitiv), Vorschau, Konstruktion, Einfügen als Zeichnung + Werte
 - **Dunkle Seiten** im Dunkelmodus, Vollbild-Schreiben, Gesten (2/3 Finger tippen = Rückgängig/Wiederholen)
 - **OneDrive-Sicherung** (automatisch, sobald online) und Sicherung als Datei
 - Export als PDF, Bild oder FingerNote-Datei

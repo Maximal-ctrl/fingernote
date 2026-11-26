@@ -114,6 +114,7 @@ class InkAction {
     const ed = this.ed;
     // Kurzes Antippen: Lernband umschalten oder Checkbox abhaken statt Punkt setzen
     if (this.travel < 4 && pt.t - this.t0 < 350) {
+      if (ed.ruler.visible && ed.ruler.snapZero && ed.ruler.zeroToNearest(pt.sx, pt.sy)) return;
       const { x, y } = ed.toPage(this.L, pt.sx, pt.sy);
       if (ed.tapContent(this.L, x, y)) return;
       if (this.tool === 'tape' || this.tool === 'marker') return;

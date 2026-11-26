@@ -3,7 +3,7 @@
 // Die Null-Marke ist der Drehpunkt: Drehen um 120°/30° für Stern, Dreieck und Zeigerdiagramme.
 // Striche, die an einer Kante beginnen, werden an der Kante entlang geführt.
 import { el } from './util.js';
-import { toast } from './ui.js';
+import { toast, prompt } from './ui.js';
 import { MM } from './ink.js';
 
 const SNAP = 14; // Fangradius in Bildschirmpunkten
@@ -29,6 +29,7 @@ export class Ruler {
     this.measuring = false; // Leiste: Zeichnen ↔ Messen
     this.snapEnds = true;   // beim Messen an Linienenden einrasten
     this.meas = null;       // { id, a:{x,y}, b:{x,y}|null } in Seitenkoordinaten
+    this.snapZero = false;  // Nullpunkt an Linienenden einrasten
     const b = (txt, title, fn) => el('button', { class: 'rb', title, 'aria-label': title, onclick: (e) => { e.stopPropagation(); fn(); } }, txt);
     this.modeDraw = b('✎ Zeichnen', 'Am Lineal zeichnen', () => this.setMeasuring(false));
     this.modeMeas = b('📏 Messen', 'Abstand zwischen zwei Punkten messen', () => this.setMeasuring(true));
@@ -44,7 +45,15 @@ export class Ruler {
       b('↻ 30°', 'Um den Nullpunkt 30° nach rechts drehen', () => this.rotateBy(30)),
       b('↻ 120°', 'Um den Nullpunkt 120° nach rechts drehen', () => this.rotateBy(120)),
       el('span', { class: 'rb-sep' }),
+      b('∠ Winkel', 'Eigenen Winkel eingeben', () => this.askAngle()),
+      el('span', { class: 'rb-sep' }),
       b('⤳ Ende', 'Nullpunkt an das Ende der letzten Linie setzen', () => this.toLastEnd()),
+      this.zeroBtn = b('', 'Nullpunkt rastet an Linienenden ein (Punkt antippen oder Lineal hinschieben)', () => {
+        this.snapZero = !this.snapZero;
+        this.syncBar();
+        if (this.snapZero) toast('Einrasten an: Linienende antippen – der Nullpunkt springt dorthin');
+      }),
+      b('⚡ Zeiger', 'Zeigerdiagramm Stern/Dreieck mit N-Leiterstrom', () => this.ed.insertPhasor()),
       b('⇅ Kante', 'Messkante wechseln (oben/unten)', () => { this.setEdge(this.edge === 'top' ? 'bottom' : 'top'); }));
     elm.parentNode.append(this.bar);
     this.syncBar();
@@ -56,6 +65,9 @@ export class Ruler {
     this.endsBtn.hidden = !this.measuring;
     this.endsBtn.textContent = this.snapEnds ? '◉ Enden: an' : '○ Enden: aus';
     this.endsBtn.classList.toggle('on', this.snapEnds);
+    this.zeroBtn.textContent = this.snapZero ? '⌖ Einrasten: an' : '⌖ Einrasten: aus';
+    this.zeroBtn.classList.toggle('on', this.snapZero);
+    this.zeroBtn.classList.add('rb-ends');
   }
 
   setMeasuring(on) {
@@ -66,11 +78,41 @@ export class Ruler {
     this.ed.requestLive();
   }
 
+  /** Eigenen Winkel eingeben: „75“ = Richtung 75°, „+36,87“ / „-20“ = weiterdrehen. */
+  async askAngle() {
+    const cur = this.dirText(this.angle).replace('°', '');
+    const v = await prompt('Winkel in Grad (gegen den Uhrzeigersinn, 0° = waagerecht nach rechts). Mit + oder − davor wird um den Nullpunkt weitergedreht.', cur, { placeholder: 'z. B. 75 oder +36,87' });
+    if (v == null || v === '') return;
+    const s = v.replace(',', '.').replace('°', '').replace('−', '-').trim();
+    const n = parseFloat(s);
+    if (!isFinite(n)) { toast('Bitte eine Zahl eingeben'); return; }
+    if (/^[+-]/.test(s)) this.rotateBy(-n);
+    else this.rotateBy(-n - this.angle);
+  }
+
+  /** Nullpunkt auf das nächste Linienende bei (sx, sy) setzen. */
+  zeroToNearest(sx, sy, rad = 26) {
+    const hit = this.ed.hitPage(sx, sy, 40);
+    if (!hit) return false;
+    const p = this.snapPoint(hit.L, sx, sy, rad, true);
+    if (!p.snap) return false;
+    const s = this.ed.toScreen(hit.L, p.x, p.y);
+    this.placeZeroAt(s.sx, s.sy);
+    return true;
+  }
+
+  /** Nach dem Verschieben mit dem Finger: Nullpunkt magnetisch an ein nahes Linienende. */
+  endMove() {
+    if (!this.snapZero) return;
+    const [zx, zy] = this.projectLx(this.edge, 0);
+    this.zeroToNearest(zx, zy, 30);
+  }
+
   /** Punkt zum Messen: rastet (wenn „Enden: an“) an Linienenden und Ecken ein. */
-  snapPoint(L, sx, sy) {
+  snapPoint(L, sx, sy, rad = 18, force = false) {
     const p0 = this.ed.toPage(L, sx, sy);
-    if (!this.snapEnds) return p0;
-    let best = null, bd = 18;
+    if (!this.snapEnds && !force) return p0;
+    let best = null, bd = rad;
     const test = (x, y) => {
       const s = this.ed.toScreen(L, x, y);
       const d = Math.hypot(s.sx - sx, s.sy - sy);
@@ -158,9 +200,9 @@ export class Ruler {
 
   /** Richtung als Winkel 0–359° (mathematisch, gegen den Uhrzeigersinn). */
   dirText(a) {
-    let d = Math.round(-a) % 360;
+    let d = Math.round(-a * 10) / 10 % 360;
     if (d < 0) d += 360;
-    return d + '°';
+    return String(Math.round(d * 10) / 10).replace('.', ',') + '°';
   }
 
   /** Skala zeichnen – nur wenn sich Zoom oder Größe geändert hat. */

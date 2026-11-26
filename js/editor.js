@@ -5,6 +5,7 @@ import * as store from './store.js';
 import { createAction, FINGER_TOOLS } from './tools.js';
 import { EditorUI } from './editor-ui.js';
 import { Ruler } from './ruler.js';
+import { phasorDialog } from './phasor.js';
 import { toast, closePopover } from './ui.js';
 
 const GAP = 36;
@@ -526,6 +527,23 @@ export class Editor {
   cacheFresh(p) {
     const c = this.caches.get(p.id);
     return c && c.ver === (p._v || 0) && c.w === p.w && c.h === p.h ? c : null;
+  }
+
+  /** Zeigerdiagramm am Nullpunkt des Lineals (sonst Bildschirmmitte) einfügen. */
+  async insertPhasor() {
+    let sx = this.W / 2, sy = this.H / 2;
+    if (this.ruler.visible) [sx, sy] = this.ruler.projectLx(this.ruler.edge, 0);
+    let hit = this.hitPage(sx, sy, 0);
+    if (!hit) { sx = this.W / 2; sy = this.H / 2; hit = this.hitPage(sx, sy, 400); }
+    if (!hit) { toast('Bitte zuerst zu einer Seite scrollen'); return; }
+    const page = hit.L.page;
+    const res = await phasorDialog(hit.x, hit.y, page.paper === 'dark');
+    if (!res) return;
+    const before = this.snap(page);
+    page.strokes = [...page.strokes, ...res.strokes];
+    page.texts = [...page.texts, ...res.texts];
+    this.pushContent(page, before);
+    toast('Zeigerdiagramm eingefügt – mit dem Lasso verschieben');
   }
 
   showMeasure(sx, sy, text, sub) {
@@ -1564,7 +1582,7 @@ export class Editor {
       else { this.mode = null; this.ui.updateZoomIndicator(); }
     } else if (this.mode === 'ruler') {
       const rest = this.touchList();
-      if (rest.length) this.ruler.begin(rest); else this.mode = null;
+      if (rest.length) this.ruler.begin(rest); else { this.mode = null; this.ruler.endMove(); }
     }
 
     if (pt.type === 'touch' && this.tap && this.touchList().length === 0) {
@@ -1574,7 +1592,7 @@ export class Editor {
         const st = getSettings();
         if (tp.max === 2 && st.tapUndo) this.undo();
         else if (tp.max === 3 && st.tapUndo) this.redo();
-        else if (tp.max === 1 && tp.pan) this.onTap(tp.x, tp.y);
+        else if (tp.max === 1 && tp.pan) { if (!(this.ruler.visible && this.ruler.snapZero && this.ruler.zeroToNearest(tp.x, tp.y))) this.onTap(tp.x, tp.y); }
       }
     }
     this.requestLive();

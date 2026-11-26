@@ -365,7 +365,24 @@ input, textarea { font: inherit; color: inherit; -webkit-user-select: text; user
   display: flex; align-items: center; justify-content: center;
 }
 .ruler-scale { position: absolute; left: 0; top: 0; }
-.ruler-bar { position: absolute; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 2px; padding: 5px; border-radius: 16px; max-width: calc(100% - 24px); overflow-x: auto; }
+.ruler-bar { position: absolute; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px; padding: 5px; border-radius: 16px; width: max-content; max-width: calc(100% - 24px); }
+.ph-dlg.dlg { width: min(860px, 100%); }
+.phasor .ph-top { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-bottom: 12px; }
+.phasor .ph-hint { font-size: 12.5px; color: var(--text-2); }
+.phasor .ph-main { display: grid; grid-template-columns: 1fr 280px; gap: 16px; align-items: start; }
+@media (max-width: 720px) { .phasor .ph-main { grid-template-columns: 1fr; } }
+.phasor .ph-prev { background: #fff; border-radius: 14px; border: 1px solid rgba(127,127,127,.25); aspect-ratio: 1; }
+.phasor .ph-prev svg { width: 100%; height: 100%; display: block; }
+.phasor .ph-row { display: grid; grid-template-columns: auto auto 1fr; gap: 6px 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(127,127,127,.18); font-size: 14px; }
+.phasor .ph-row b { grid-column: 1 / -1; font-size: 13px; }
+.phasor .ph-num { width: 78px; height: 34px; padding: 0 8px; display: inline-block; }
+.phasor .ph-kind { margin-left: 8px; font-size: 12px; color: var(--text-2); }
+.phasor .ph-slide { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); }
+.phasor .ph-slider { flex: 1; accent-color: var(--accent); }
+.phasor .ph-res { margin-top: 12px; font-size: 13.5px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.phasor .ph-res .strong { font-weight: 750; font-size: 15px; color: var(--accent); }
+.phasor .ph-opts { display: flex; flex-wrap: wrap; gap: 10px 20px; margin-top: 14px; font-size: 14px; align-items: center; }
+.phasor .ph-opts label { display: flex; align-items: center; gap: 8px; }
 .ruler-bar .rb { border: 0; background: transparent; color: var(--text); font: 650 13px var(--font); padding: 8px 10px; border-radius: 11px; white-space: nowrap; cursor: pointer; font-variant-numeric: tabular-nums; }
 .ruler-bar .rb:active { background: var(--hover, rgba(127,127,127,.18)); }
 .ruler-bar .rb-seg { display: flex; gap: 2px; padding: 2px; border-radius: 13px; background: rgba(127,127,127,.14); }
