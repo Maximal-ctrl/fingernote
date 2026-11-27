@@ -45,7 +45,10 @@ class App {
       const r = await accounts.showLogin({ canRestore: !!od.clientId(), notice });
       notice = '';
       if (r.account) acc = r.account;
-      else if (r.restore) {
+      else if (r.restoreFile) {
+        try { restored = await accounts.restoreFromFile(r.restoreFile, r.name, r.password); acc = restored.account; }
+        catch (e) { notice = e.message; }
+      } else if (r.restore) {
         try { await od.connect(r.restore); return; } // Weiterleitung zu Microsoft
         catch (e) { notice = e.message; }
       }
@@ -56,7 +59,7 @@ class App {
       try {
         await silently(() => store.importData(new File([restored.blob], 'onedrive.json')));
         saveSettings({ welcomed: true });
-        toast(`Willkommen zurück, ${acc.name} – deine Bücher wurden aus OneDrive geladen.`, { ms: 5000 });
+        toast(`Willkommen zurück, ${acc.name} – deine Bücher wurden übernommen.`, { ms: 5000 });
       } catch (e) { toast('Konto angelegt, aber die Bücher konnten nicht geladen werden: ' + e.message, { ms: 7000 }); }
     }
 

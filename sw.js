@@ -7,7 +7,7 @@
  * alte und neue Programmteile), offline kommt sie aus dem Gerätespeicher.
  * Bei jeder Veröffentlichung VERSION erhöhen.
  */
-const VERSION = 'fingernote-v2.34';
+const VERSION = 'fingernote-v2.35';
 const FILES = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css', 'js/boot.js',
   'js/app.js', 'js/util.js', 'js/db.js', 'js/store.js', 'js/ink.js', 'js/shapes.js', 'js/tools.js',

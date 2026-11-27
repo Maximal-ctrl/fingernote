@@ -3,7 +3,7 @@
 // Über OneDrive lässt sich ein Konto samt Büchern auf jedem Gerät wieder abrufen.
 // Hinweis: Passwort und Code schützen vor fremdem Zugriff in der App – die Daten selbst
 // liegen unverschlüsselt im App-Speicher des Geräts.
-import { el, uid, useSettingsKey } from './util.js';
+import { el, uid, useSettingsKey, pickFile } from './util.js';
 import { useDatabase, deleteDatabase } from './db.js';
 import { logoSvg } from './icons.js';
 import { REGISTER_CODE } from './config.js';
@@ -154,16 +154,21 @@ export function showLogin({ canRestore = false, notice = '' } = {}) {
     const shell = (mode, ...content) => {
       root.innerHTML = '';
       const tabs = el('div', { class: 'login-tabs seg' },
-        el('button', { type: 'button', class: mode === 'login' ? 'on' : '', onclick: () => login() }, 'Anmelden'),
+        el('button', { type: 'button', class: mode === 'login' ? 'on' : '', onclick: () => login('', true) }, 'Anmelden'),
         el('button', { type: 'button', class: mode === 'create' ? 'on' : '', onclick: () => create() }, 'Konto erstellen'));
       root.append(el('div', { class: 'login-bg' }), el('form', { class: 'login-card', novalidate: true, onsubmit: (e) => e.preventDefault() },
         el('div', { class: 'login-logo', html: logoSvg(60) }), tabs, ...content));
     };
     const msgEl = () => el('div', { class: 'pin-msg', role: 'alert' }, '');
 
-    const login = (prefill = '') => {
+    // Konto aus einer FingerNote-Sicherungsdatei holen (z. B. von Safari zur Home-Bildschirm-App)
+    const fromFile = async (n, p) => {
+      const f = await pickFile('application/json,.json,.fingernote');
+      if (f) finish({ restoreFile: f, name: n, password: p });
+    };
+    const login = (prefill = '', forced = false) => {
       const list = listAccounts();
-      if (!list.length && !prefill && !canRestore) { create(true); return; }
+      if (!list.length && !prefill && !canRestore && !forced && !notice) { create(true); return; }
       const name = el('input', { class: 'inp', type: 'text', placeholder: 'Name', autocomplete: 'username', autocapitalize: 'words', value: prefill || (list.length === 1 ? list[0].name : '') });
       const pw = pwField('Passwort', 'current-password');
       const msg = msgEl();
@@ -179,10 +184,12 @@ export function showLogin({ canRestore = false, notice = '' } = {}) {
         if (!acc) {
           msg.textContent = `Auf diesem Gerät gibt es kein Konto „${n}“.`;
           restoreBox.hidden = false;
-          restoreBox.replaceChildren(
-            el('p', null, canRestore ? 'Hast du das Konto auf einem anderen Gerät angelegt und mit OneDrive gesichert? Dann hol es hierher:' : 'Konten lassen sich über OneDrive auf andere Geräte holen – dafür muss in der App einmal eine OneDrive-App-ID eingetragen sein (siehe README).'),
+          restoreBox.replaceChildren(...[
+            el('p', null, 'Die App auf dem Home-Bildschirm hat einen eigenen Speicher – Konten aus Safari (oder von einem anderen Gerät) sind hier nicht automatisch vorhanden. So holst du dein Konto mit allen Büchern hierher:'),
+            el('button', { class: 'btn wide', type: 'button', onclick: () => fromFile(n, p) }, 'Konto aus Sicherungsdatei holen'),
+            el('p', { class: 'restore-hint' }, 'Die Datei bekommst du dort, wo das Konto bisher ist: Einstellungen → „Sichern“ → „In Dateien sichern“.'),
             canRestore ? el('button', { class: 'btn wide', type: 'button', onclick: () => finish({ restore: { name: n, password: p } }) }, 'Konto aus OneDrive holen') : null,
-            el('button', { class: 'link-btn', type: 'button', onclick: () => create(false, n) }, 'Oder neues Konto erstellen'));
+            el('button', { class: 'link-btn', type: 'button', onclick: () => create(false, n) }, 'Oder neues Konto erstellen')].filter(Boolean));
           return;
         }
         if (await checkPassword(acc, p)) { finish({ account: acc }); return; }
@@ -201,6 +208,7 @@ export function showLogin({ canRestore = false, notice = '' } = {}) {
       shell('login',
         el('h1', { class: 'login-h' }, 'Willkommen zurück'),
         notice ? el('p', { class: 'login-notice' }, notice) : null,
+        !list.length ? el('p', { class: 'login-notice soft' }, 'Auf diesem Gerät bzw. in dieser Home-Bildschirm-App gibt es noch kein Konto. Gib Name und Passwort ein – danach kannst du dein Konto aus einer Sicherungsdatei oder OneDrive holen.') : null,
         chips, name, pw, msg,
         el('button', { class: 'btn primary wide', type: 'button', onclick: submit }, 'Anmelden'),
         restoreBox);
@@ -281,4 +289,18 @@ function passwordDialog(title, fields, check) {
     document.getElementById('overlay').append(back);
     setTimeout(() => inputs[0].input.focus(), 60);
   });
+}
+
+/** Konto aus einer Sicherungsdatei übernehmen (Datei muss das Konto enthalten, Passwort wird geprüft). */
+export async function restoreFromFile(file, name, password) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch (e) { throw new Error('Die Datei ist keine FingerNote-Sicherung.'); }
+  if (!data || data.app !== 'FingerNote') throw new Error('Die Datei ist keine FingerNote-Sicherung.');
+  const a = data.account;
+  if (!a || !a.salt || !a.pw) throw new Error('Diese Sicherung enthält kein Konto (ältere Version). Erstelle ein Konto und öffne die Datei danach über „+ Neu → FingerNote-Datei öffnen“.');
+  if (name && a.name.trim().toLowerCase() !== name.trim().toLowerCase()) throw new Error(`Die Sicherung gehört zum Konto „${a.name}“, nicht zu „${name}“.`);
+  if (!(await checkPassword(a, password))) throw new Error('Das Passwort passt nicht zu dem Konto in der Sicherung.');
+  const existing = listAccounts().find((x) => x.id === a.id);
+  const account = existing || await createAccount(a.name, null, a.color, a);
+  return { account, blob: file };
 }

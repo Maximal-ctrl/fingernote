@@ -809,7 +809,8 @@ export class Library {
   async backup() {
     const prog = progress('Sicherung wird erstellt');
     try {
-      const blob = await store.exportData(null);
+      // Konto (Name + Passwort-Hash) mitsichern → damit lässt es sich auf anderen Geräten/in der Home-Bildschirm-App anmelden
+      const blob = await store.exportData(null, { account: accounts.portableAccount() });
       prog.close();
       const r = await offerFile(blob, `FingerNote-Backup-${dateStamp()}.json`, 'Sicherung ist fertig');
       if (r) { saveSettings({ lastBackup: Date.now() }); this.render(); }
