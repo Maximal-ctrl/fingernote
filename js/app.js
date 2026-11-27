@@ -82,6 +82,13 @@ class App {
     await this.library.refresh();
     od.startAutoSync();
 
+    if (oauth && oauth.purpose === 'notes') {
+      const parent = sessionStorage.getItem('fingernote.notesParent') || null;
+      sessionStorage.removeItem('fingernote.notesParent');
+      if (oauth.ok) this.library.importOneNote(parent, true);
+      else toast('OneNote: ' + oauth.error, { ms: 6000 });
+      return;
+    }
     if (oauth && !restored && oauth.account !== '__restore__') {
       if (oauth.ok) { toast('OneDrive verbunden – wird gesichert …'); od.upload().then(() => toast('In OneDrive gesichert')).catch((e) => toast(e.message)); }
       else toast('OneDrive: ' + oauth.error, { ms: 6000 });

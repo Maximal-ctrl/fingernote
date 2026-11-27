@@ -10,6 +10,10 @@ import { silently } from './db.js';
 const AUTH = 'https://login.microsoftonline.com/common/oauth2/v2.0';
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const SCOPE = 'Files.ReadWrite.AppFolder User.Read offline_access';
+// Nur für den OneNote-Import (eigene Anmeldung, damit die Sicherung davon unberührt bleibt)
+const SCOPE_NOTES = 'Notes.Read User.Read offline_access';
+const scopeFor = (purpose) => (purpose === 'notes' ? SCOPE_NOTES : SCOPE);
+const tokKey = (purpose) => (purpose === 'notes' ? 'odn' : 'od');
 const PENDING = 'fingernote.oauth';
 
 export class NeedLogin extends Error { constructor() { super('Bitte erneut mit OneDrive verbinden.'); this.needLogin = true; } }
@@ -18,8 +22,8 @@ export const clientId = () => (getSettings().odClientId || ONEDRIVE_CLIENT_ID ||
 const redirectUri = () => location.origin + location.pathname;
 const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-function tokens() { try { return JSON.parse(localStorage.getItem(accountKey('od')) || 'null'); } catch (e) { return null; } }
-function setTokens(t) { if (t) localStorage.setItem(accountKey('od'), JSON.stringify(t)); else localStorage.removeItem(accountKey('od')); }
+function tokens(purpose) { try { return JSON.parse(localStorage.getItem(accountKey(tokKey(purpose))) || 'null'); } catch (e) { return null; } }
+function setTokens(t, purpose) { if (t) localStorage.setItem(accountKey(tokKey(purpose)), JSON.stringify(t)); else localStorage.removeItem(accountKey(tokKey(purpose))); }
 export function status() {
   try { return JSON.parse(localStorage.getItem(accountKey('odstate')) || '{}'); } catch (e) { return {}; }
 }
@@ -34,17 +38,17 @@ export const isConnected = () => !!tokens();
 export const accountInfo = () => (tokens() || {}).user || null;
 
 /** Weiterleitung zur Microsoft-Anmeldung. */
-export async function connect(restore = null) {
+export async function connect(restore = null, purpose = 'sync') {
   const id = clientId();
   if (!id) throw new Error('Es ist noch keine OneDrive-App-ID eingetragen.');
   if (restore) sessionStorage.setItem('fingernote.restore', JSON.stringify(restore));
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
   const state = uid() + uid();
-  localStorage.setItem(PENDING, JSON.stringify({ verifier, state, account: restore ? '__restore__' : currentAccount().id, redirect: redirectUri(), client: id }));
+  localStorage.setItem(PENDING, JSON.stringify({ verifier, state, account: restore ? '__restore__' : currentAccount().id, redirect: redirectUri(), client: id, purpose }));
   const q = new URLSearchParams({
     client_id: id, response_type: 'code', redirect_uri: redirectUri(), response_mode: 'query',
-    scope: SCOPE, state, code_challenge: challenge, code_challenge_method: 'S256', prompt: 'select_account',
+    scope: scopeFor(purpose), state, code_challenge: challenge, code_challenge_method: 'S256', prompt: 'select_account',
   });
   location.href = `${AUTH}/authorize?${q}`;
 }
@@ -63,7 +67,7 @@ export async function handleRedirect() {
   try {
     const body = new URLSearchParams({
       client_id: pend.client, grant_type: 'authorization_code', code: q.get('code'),
-      redirect_uri: pend.redirect, code_verifier: pend.verifier, scope: SCOPE,
+      redirect_uri: pend.redirect, code_verifier: pend.verifier, scope: scopeFor(pend.purpose),
     });
     const res = await fetch(`${AUTH}/token`, { method: 'POST', body });
     const j = await res.json();
@@ -74,31 +78,50 @@ export async function handleRedirect() {
       t.user = { name: me.displayName || '', mail: me.mail || me.userPrincipalName || '' };
     } catch (e) { t.user = { name: 'OneDrive', mail: '' }; }
     // Tokens gehören zum Konto, das die Anmeldung gestartet hat
-    localStorage.setItem(`fingernote.od.${pend.account}`, JSON.stringify(t));
-    return { account: pend.account, ok: true };
+    localStorage.setItem(`fingernote.${tokKey(pend.purpose)}.${pend.account}`, JSON.stringify(t));
+    return { account: pend.account, ok: true, purpose: pend.purpose || 'sync' };
   } catch (e) {
-    return { account: pend.account, error: e.message };
+    return { account: pend.account, error: e.message, purpose: pend.purpose || 'sync' };
   }
 }
 
 export function disconnect() { setTokens(null); setStatus({ lastUpload: 0, pending: false, error: '' }); }
 
-async function accessToken() {
-  const t = tokens();
+async function accessToken(purpose = 'sync') {
+  const t = tokens(purpose);
   if (!t) throw new NeedLogin();
   if (Date.now() < t.exp - 90000) return t.access;
   if (!t.refresh) throw new NeedLogin();
-  const body = new URLSearchParams({ client_id: t.client || clientId(), grant_type: 'refresh_token', refresh_token: t.refresh, scope: SCOPE });
+  const body = new URLSearchParams({ client_id: t.client || clientId(), grant_type: 'refresh_token', refresh_token: t.refresh, scope: scopeFor(purpose) });
   const res = await fetch(`${AUTH}/token`, { method: 'POST', body });
   const j = await res.json().catch(() => ({}));
   if (!res.ok) {
     // Microsoft lässt Anmeldungen von Web-Apps nach 24 Stunden ablaufen
+    if (purpose === 'notes') { setTokens(null, purpose); throw new NeedLogin(); }
     setStatus({ needLogin: true });
     throw new NeedLogin();
   }
-  setTokens({ ...t, access: j.access_token, refresh: j.refresh_token || t.refresh, exp: Date.now() + j.expires_in * 1000 });
-  setStatus({ needLogin: false });
+  setTokens({ ...t, access: j.access_token, refresh: j.refresh_token || t.refresh, exp: Date.now() + j.expires_in * 1000 }, purpose);
+  if (purpose !== 'notes') setStatus({ needLogin: false });
   return j.access_token;
+}
+
+/** Microsoft Graph für den OneNote-Import (eigene Anmeldung mit Notes.Read). */
+export const notesConnected = () => !!tokens('notes');
+export function notesDisconnect() { setTokens(null, 'notes'); }
+export async function notesFetch(urlOrPath, opts = {}) {
+  const tok = await accessToken('notes');
+  const url = urlOrPath.startsWith('http') ? urlOrPath : GRAPH + urlOrPath;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${tok}` } });
+    if (res.status === 401) { setTokens(null, 'notes'); throw new NeedLogin(); }
+    if ((res.status === 429 || res.status === 503) && attempt < 5) {
+      const wait = (parseFloat(res.headers.get('Retry-After')) || 2 + attempt * 3) * 1000;
+      await new Promise((r) => setTimeout(r, wait));
+      continue;
+    }
+    return res;
+  }
 }
 
 async function graph(path, opts = {}) {

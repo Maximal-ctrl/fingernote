@@ -294,17 +294,22 @@ function installSymbols() {
   const R = 'Installation – Raum';
   const c0 = [[0, 0, '']];
   const sw = (ops) => [['c', 0, 0, 1.6, 'w'], ...ops];
+  const SOCK = [['a', 0, 0, 4, 180, 360], ['l', 0, -4, 0, -7.5]];
   const box = (t, w = 9, h = 6) => [['r', -w / 2, -h / 2, w, h, 'w'], ['t', 0, 0, t, 2.6]];
   return {
-    i_socket: { name: 'Schutzkontaktsteckdose', cat: I, prefix: 'X', val: '', pins: c0, ops: [['a', 0, 0, 4, 180, 360], ['l', -4, 0, 4, 0], ['l', 0, -4, 0, -6]] },
-    i_socket2: { name: 'Steckdose 2-fach', cat: I, prefix: 'X', val: '', pins: c0, ops: [['a', 0, 0, 4, 180, 360], ['l', -4, 0, 4, 0], ['l', 0, -4, 0, -6], ['t', 5.5, -3, '2', 2.6]] },
-    i_socket3: { name: 'Steckdose 3-fach', cat: I, prefix: 'X', val: '', pins: c0, ops: [['a', 0, 0, 4, 180, 360], ['l', -4, 0, 4, 0], ['l', 0, -4, 0, -6], ['t', 5.5, -3, '3', 2.6]] },
-    i_cee: { name: 'Drehstromsteckdose (CEE)', cat: I, prefix: 'X', val: '400 V', pins: c0, ops: [['a', 0, 0, 4, 180, 360], ['l', -4, 0, 4, 0], ['l', 0, -4, 0, -6], ['l', -2, -5, -1, -3], ['l', 1, -5, 2, -3], ['l', -0.5, -5.5, 0.5, -3.5]] },
+    // Steckdosen nach EN 60617-11 (11-13-01 … 11-13-04): Halbkreis mit Anschlussstrich am Scheitel (zur Wand),
+    // Schutzkontakt = Querstrich am Scheitel, Mehrfachsteckdose = Schrägstrich mit Anzahl
+    i_socket: { name: 'Schutzkontaktsteckdose', cat: I, prefix: 'X', val: '', pins: c0, ops: [...SOCK, ['l', -4, -4, 4, -4]] },
+    i_socket_plain: { name: 'Steckdose (ohne Schutzkontakt)', cat: I, prefix: 'X', val: '', pins: c0, ops: [...SOCK] },
+    i_socket2: { name: 'Steckdose 2-fach (Schutzkontakt)', cat: I, prefix: 'X', val: '', pins: c0, ops: [...SOCK, ['l', -4, -4, 4, -4], ['l', 3.6, -4.6, 0.6, -1.8], ['t', 5.4, -4.6, '2', 2.6]] },
+    i_socket3: { name: 'Steckdose 3-fach (Schutzkontakt)', cat: I, prefix: 'X', val: '', pins: c0, ops: [...SOCK, ['l', -4, -4, 4, -4], ['l', 3.6, -4.6, 0.6, -1.8], ['t', 5.4, -4.6, '3', 2.6]] },
+    i_cee: { name: 'Drehstromsteckdose (CEE)', cat: I, prefix: 'X', val: '400 V', pins: c0, ops: [...SOCK, ['l', -4, -4, 4, -4], ['l', 3.6, -4.6, 0.6, -1.8], ['t', 5.4, -4.6, '3~', 2.4]] },
     i_stove: { name: 'Herdanschlussdose', cat: I, prefix: 'X', val: '', pins: c0, ops: [['r', -4, -2.5, 8, 5, 'w'], ['l', -2.5, 1.5, -1, -1.5], ['l', -0.5, 1.5, 1, -1.5], ['l', 1.5, 1.5, 3, -1.5]] },
     i_off: { name: 'Ausschalter', cat: I, prefix: 'S', val: '', pins: c0, ops: sw([['l', 1.1, -1.1, 5, -5], ['l', 5, -5, 6.2, -3.8]]) },
     i_series: { name: 'Serienschalter', cat: I, prefix: 'S', val: '', pins: c0, ops: sw([['l', 1.1, -1.1, 5, -5], ['l', 5, -5, 6.2, -3.8], ['l', 3.5, -3.5, 4.7, -2.3]]) },
     i_twoway: { name: 'Wechselschalter', cat: I, prefix: 'S', val: '', pins: c0, ops: sw([['l', 1.1, -1.1, 5, -5], ['l', 5, -5, 6.2, -3.8], ['l', -1.1, 1.1, -5, 5], ['l', -5, 5, -6.2, 3.8]]) },
-    i_cross: { name: 'Kreuzschalter', cat: I, prefix: 'S', val: '', pins: c0, ops: sw([['l', 1.1, -1.1, 5, -5], ['l', 5, -5, 6.2, -3.8], ['l', -1.1, 1.1, -5, 5], ['l', -5, 5, -6.2, 3.8], ['l', -1.1, -1.1, -5, -5], ['l', -5, -5, -3.8, -6.2], ['l', 1.1, 1.1, 5, 5], ['l', 5, 5, 3.8, 6.2]]) },
+    // Kreuzschalter (EN 60617-11): vier Schaltarme, Fahnen spiegelbildlich zur senkrechten Achse (Wechselschalter + Spiegelbild)
+    i_cross: { name: 'Kreuzschalter', cat: I, prefix: 'S', val: '', pins: c0, ops: sw([['l', 1.1, -1.1, 5, -5], ['l', 5, -5, 6.2, -3.8], ['l', -1.1, 1.1, -5, 5], ['l', -5, 5, -6.2, 3.8], ['l', -1.1, -1.1, -5, -5], ['l', -5, -5, -6.2, -3.8], ['l', 1.1, 1.1, 5, 5], ['l', 5, 5, 6.2, 3.8]]) },
     i_button: { name: 'Taster', cat: I, prefix: 'S', val: '', pins: c0, ops: [['c', 0, 0, 2.2, 'w'], ['c', 0, 0, 0.8, true]] },
     i_dimmer: { name: 'Dimmer', cat: I, prefix: 'S', val: '', pins: c0, ops: sw([['l', 1.1, -1.1, 5, -5], ['l', 5, -5, 6.2, -3.8], ...arrow(-3, 3, 3, -3, 1.2)]) },
     i_motion: { name: 'Bewegungsmelder', cat: I, prefix: 'B', val: '', pins: c0, ops: [['a', 0, 0, 3.5, 180, 360], ['l', -3.5, 0, 3.5, 0], ['a', 0, 0, 5.5, 210, 330]] },

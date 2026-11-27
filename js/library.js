@@ -11,6 +11,7 @@ import { renderPageToCanvas, ensureImages, pageRegion } from './ink.js';
 import { World } from './world.js';
 import * as accounts from './accounts.js';
 import * as od from './onedrive.js';
+import { importFiles, oneNoteTree, importOneNote } from './importers.js';
 
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 const isStandalone = () => window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
@@ -403,6 +404,8 @@ export class Library {
       { label: 'Ordner', icon: 'folderPlus', run: () => this.newFolder(parent) },
       { sep: true },
       { label: 'PDF als Buch importieren', icon: 'pdf', run: () => this.importPdf(parent) },
+      { label: 'Aus OneNote importieren', icon: 'cloud', run: () => this.importOneNote(parent) },
+      { label: 'GoodNotes, PDFs, Bilder, ZIP …', icon: 'upload', run: () => this.importOther(parent) },
       { label: 'FingerNote-Datei öffnen', icon: 'upload', run: () => this.importFile() },
     ]);
   }
@@ -504,6 +507,92 @@ export class Library {
       console.error(e);
       prog.close();
       toast('Das PDF konnte nicht gelesen werden.');
+    }
+  }
+
+  /** GoodNotes-Exporte, PDFs, Bilder und ZIP-Archive (mit Ordnern) importieren. */
+  async importOther(parent = null) {
+    const ok = await dialog({
+      title: 'Aus GoodNotes & Co. importieren',
+      body: el('div', { class: 'imp-help' },
+        el('p', null, el('b', null, 'GoodNotes: '), 'Buch oder ganzen Ordner auswählen → Teilen/Exportieren → ', el('b', null, 'PDF'), '. So bleibt die Handschrift erhalten. Mehrere Bücher exportiert GoodNotes als ZIP – die Ordnerstruktur wird übernommen.'),
+        el('p', null, el('b', null, 'Ordner von iPad/PC: '), 'In der Dateien-App einen Ordner lange drücken → „Komprimieren“ und die ZIP-Datei wählen – Unterordner werden zu Ordnern, jedes PDF zu einem Buch.'),
+        el('p', null, el('b', null, '.goodnotes-Dateien '), 'werden auch geöffnet: enthaltene PDFs und Bilder werden übernommen (die Handschrift darin ist verschlüsselt gespeichert und nur über den PDF-Export lesbar).'),
+        el('p', { class: 'field-hint' }, 'Erlaubt: PDF, PNG, JPG, ZIP, .goodnotes – auch mehrere auf einmal.')),
+      buttons: [{ label: 'Abbrechen', value: false }, { label: 'Dateien wählen', primary: true, value: true }],
+    });
+    if (!ok) return;
+    const files = await pickFile('application/pdf,.pdf,image/*,.zip,application/zip,.goodnotes', true);
+    if (!files || !files.length) return;
+    const prog = progress('Wird importiert');
+    try {
+      const r = await importFiles(files, parent, (f, t) => prog.set(f, t));
+      prog.close();
+      await this.refresh();
+      this.importReport(r);
+    } catch (e) { console.error(e); prog.close(); toast(e.message || 'Import fehlgeschlagen'); }
+  }
+
+  importReport(r) {
+    const parts = [];
+    if (r.books) parts.push(`${r.books} ${r.books === 1 ? 'Buch' : 'Bücher'}`);
+    if (r.folders) parts.push(`${r.folders} Ordner`);
+    if (r.pages) parts.push(`${r.pages} Seiten`);
+    const msg = parts.length ? `Importiert: ${parts.join(', ')}` : 'Es wurde nichts importiert.';
+    if (!r.warnings.length) { toast(msg, { ms: 4000 }); return; }
+    dialog({ title: msg, body: el('div', null, el('p', null, 'Hinweise:'), el('ul', { class: 'imp-warn' }, r.warnings.slice(0, 30).map((w) => el('li', null, w)))), buttons: [{ label: 'OK', value: true, primary: true }] });
+  }
+
+  /** OneNote: alle Notizbücher mit Abschnitten und Seiten über das Microsoft-Konto holen. */
+  async importOneNote(parent = null, afterLogin = false) {
+    if (!od.clientId()) {
+      await dialog({ title: 'OneNote-Import', body: el('div', null,
+        el('p', null, 'Für OneNote braucht FingerNote einmalig eine kostenlose Microsoft-App-ID – dieselbe wie für die OneDrive-Sicherung.'),
+        el('p', null, 'Trage sie unter Einstellungen → OneDrive ein (Anleitung in der README). Danach hier erneut „Aus OneNote importieren“ wählen.'),
+        el('p', { class: 'field-hint' }, 'Alternative ohne App-ID: In OneNote ein Notizbuch/Abschnitt als PDF exportieren und mit „GoodNotes, PDFs, Bilder, ZIP …“ importieren.')),
+      buttons: [{ label: 'OK', value: true, primary: true }] });
+      return;
+    }
+    if (!od.notesConnected()) {
+      const go = await confirm('Mit OneNote verbinden', 'Du wirst zur Microsoft-Anmeldung weitergeleitet und erlaubst FingerNote, deine OneNote-Notizbücher zu lesen (nur lesen). Danach geht es hier weiter.', 'Anmelden');
+      if (!go) return;
+      sessionStorage.setItem('fingernote.notesParent', parent || '');
+      try { await od.connect(null, 'notes'); } catch (e) { toast(e.message); }
+      return;
+    }
+    const prog = progress('OneNote wird gelesen');
+    let tree;
+    try { tree = await oneNoteTree(); prog.close(); }
+    catch (e) {
+      prog.close();
+      if (e.needLogin) { od.notesDisconnect(); if (!afterLogin) return this.importOneNote(parent); }
+      toast(e.message || 'OneNote konnte nicht gelesen werden', { ms: 6000 });
+      return;
+    }
+    if (!tree.length) { toast('In diesem Microsoft-Konto wurden keine OneNote-Notizbücher gefunden.', { ms: 5000 }); return; }
+    const count = (g) => g.sections.length + g.groups.reduce((a, x) => a + count(x), 0);
+    const checks = tree.map((nb) => { const c = el('input', { type: 'checkbox', class: 'switch' }); c.checked = true; return c; });
+    const r = await dialog({
+      title: 'OneNote-Notizbücher importieren', wide: true,
+      body: el('div', null,
+        el('p', { class: 'field-hint' }, 'Notizbücher und Abschnittsgruppen werden zu Ordnern, jeder Abschnitt zu einem Buch. Text, Bilder und Handschrift werden übernommen.'),
+        el('div', { class: 'imp-list' }, tree.map((nb, i) => el('label', { class: 'row-toggle' }, el('span', null, el('b', null, nb.displayName), ` · ${count(nb)} Abschnitte`), checks[i])))),
+      buttons: [{ label: 'Abbrechen', value: false }, { label: 'Importieren', primary: true, value: true }],
+    });
+    if (!r) return;
+    const pick = tree.filter((_, i) => checks[i].checked);
+    if (!pick.length) return;
+    const p2 = progress('Import aus OneNote');
+    try {
+      const res = await importOneNote(pick, parent, (f, t) => p2.set(f, t));
+      p2.close();
+      await this.refresh();
+      this.importReport(res);
+    } catch (e) {
+      console.error(e);
+      p2.close();
+      await this.refresh();
+      toast(e.needLogin ? 'Die OneNote-Anmeldung ist abgelaufen – bitte erneut importieren.' : (e.message || 'Import fehlgeschlagen'), { ms: 6000 });
     }
   }
 

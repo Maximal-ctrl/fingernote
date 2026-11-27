@@ -3,12 +3,13 @@
 import { el, uid, clamp, debounce, safeFileName, dateStamp, getSettings, saveSettings } from './util.js';
 import { icon } from './icons.js';
 import { toast, dialog, menu, prompt, confirm, progress, closePopover, toggle } from './ui.js';
+import { openSymbolEditor } from './symed.js';
 import { SYMBOLS, CATEGORIES, INSTALL_CATEGORIES, CABINET_CATEGORIES, cab, xf, partPins, partBox, isVertical, drawSymbol, getSym, registerCustom, unregisterCustom, allSymbols } from './schem-symbols.js';
 import * as store from './store.js';
 import { buildPdf } from './pdfio.js';
 import { offerFile } from './editor-ui.js';
 
-export const SHEET_SIZES = { A4: { w: 297, h: 210, cols: 8, label: 'A4 quer' }, A3: { w: 420, h: 297, cols: 10, label: 'A3 quer' } };
+export const SHEET_SIZES = { A4: { w: 297, h: 210, cols: 8, rows: 4, label: 'A4 quer' }, A3: { w: 420, h: 297, cols: 10, rows: 6, label: 'A3 quer' } };
 const GRID = 5;
 const LW = 0.35;
 const INK = '#16161a';
@@ -360,6 +361,17 @@ export function renderSheet(pen, sheets, idx, A, meta = {}, opt = {}) {
     if (c) pen.line(x0 + c * cw, y0, x0 + c * cw, y0 + 5, FRAME);
     pen.text(x0 + c * cw + cw / 2, y0 + 3.7, String(c + 1), 3, 'center', FRAME);
   }
+  // Zeileneinteilung links und rechts (A, B, C …) – Koordinatensystem nach DIN EN 61082
+  const ry0 = y0 + 5, rh = (y1 - ry0) / S.rows;
+  pen.line(x0 + 5, ry0, x0 + 5, y1, FRAME);
+  pen.line(x1 - 5, ry0, x1 - 5, y1 - 22, FRAME);
+  for (let r = 0; r < S.rows; r++) {
+    const yy = ry0 + r * rh;
+    if (r) { pen.line(x0, yy, x0 + 5, yy, FRAME); if (yy < y1 - 22) pen.line(x1 - 5, yy, x1, yy, FRAME); }
+    const L = String.fromCharCode(65 + r);
+    pen.text(x0 + 2.5, yy + rh / 2 + 1.1, L, 3, 'center', FRAME);
+    if (yy + rh / 2 < y1 - 24) pen.text(x1 - 2.5, yy + rh / 2 + 1.1, L, 3, 'center', FRAME);
+  }
   // Schriftfeld
   const tw = 130, th = 22, tx = x1 - tw, ty = y1 - th;
   pen.poly([tx, ty, x1, ty, x1, y1, tx, y1], true, '#ffffff', FRAME, 0.5);
@@ -629,6 +641,11 @@ export class SchematicEditor {
       for (const [k, v] of items) {
         const b = el('button', { class: `sym-tile ${this.placeType === k && this.tool === 'place' ? 'on' : ''}`, title: v.name }, symbolPreview(k), el('span', null, v.name));
         b.addEventListener('click', () => this.startPlace(k));
+        if (v.kind !== 'cab' && v.ops) {
+          const ed = el('button', { class: 'sym-edit', title: 'Als eigenes Bauteil bearbeiten', 'aria-label': 'Bearbeiten', html: icon('pencil') });
+          ed.addEventListener('click', (e) => { e.stopPropagation(); this.symbolEditor(v.custom ? v : { ...v, custom: false }); });
+          b.append(ed);
+        }
         grid.append(b);
       }
       list.append(grid);
@@ -1784,9 +1801,10 @@ export class SchematicEditor {
       body: el('div', null, el('div', { class: 'form-grid' },
         fld('Betriebsmittelkennzeichen (BMK)', ref, ['no', 'nc', 'co'].includes(sym.kind) ? 'Gleiches BMK wie die Spule → Kontaktspiegel und Querverweis entstehen automatisch.' : ''),
         fld('Wert / Typ', val), fld('Bemerkung / Artikel', note)), pinBox, showRef),
-      buttons: [{ label: 'Abbrechen', value: null }, { label: 'Übernehmen', value: true, primary: true }],
+      buttons: [{ label: 'Abbrechen', value: null }, ...(sym.kind !== 'cab' && sym.ops ? [{ label: 'Symbol zeichnen …', value: 'sym' }] : []), { label: 'Übernehmen', value: true, primary: true }],
       onOpen: () => setTimeout(() => ref.select(), 60),
     });
+    if (r === 'sym') { this.symbolEditor(sym.custom ? sym : { ...sym, custom: false }, part); return; }
     if (!r) return;
     const before = this.snap();
     let rv = ref.value.trim();
@@ -1800,151 +1818,49 @@ export class SchematicEditor {
   }
 
   // ------------------------------------------------------------ Eigene Bauteile
-  async symbolEditor(existing) {
-    const def = existing ? JSON.parse(JSON.stringify({ id: existing.id, name: existing.name, prefix: existing.prefix, val: existing.val, kind: existing.kind || '', pins: existing.pins, ops: existing.ops }))
+  /**
+   * Bauteil-Editor öffnen. existing: eigenes Bauteil (wird geändert) oder eingebautes (wird als Kopie gespeichert).
+   * part: platziertes Bauteil, von dem aus bearbeitet wird (dann kann es direkt ersetzt werden).
+   */
+  async symbolEditor(existing, part = null) {
+    const builtin = existing && !existing.custom;
+    const copy = (o) => JSON.parse(JSON.stringify(o));
+    const def = existing
+      ? { id: builtin ? 'c_' + uid() : existing.id, name: builtin ? existing.name + ' (eigen)' : existing.name, prefix: existing.prefix || '', val: existing.val || '',
+        kind: ['no', 'nc', 'co', 'coil'].includes(existing.kind) ? existing.kind : '', pins: copy(existing.pins || []), ops: copy(existing.ops || []) }
       : { id: 'c_' + uid(), name: '', prefix: 'X', val: '', kind: '', pins: [], ops: [] };
-    const hist = [];
-    const W = 66, H = 44, K = 6; // Zeichenfläche in mm, Pixel pro mm
-    const cv = el('canvas', { class: 'symed-canvas' });
-    const d = Math.min(window.devicePixelRatio || 1, 2);
-    cv.width = W * K * d; cv.height = H * K * d;
-    cv.style.width = W * K + 'px'; cv.style.height = H * K + 'px';
-    const ctx = cv.getContext('2d');
-    let tool = 'l', drag = null;
-    const toMm = (e) => { const r = cv.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * W - W / 2, ((e.clientY - r.top) / r.height) * H - H / 2]; };
-    const sn = (v, g) => Math.round(v / g) * g;
-    const paintEd = () => {
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
-      ctx.setTransform(K * d, 0, 0, K * d, (W / 2) * K * d, (H / 2) * K * d);
-      ctx.fillStyle = 'rgba(60,80,120,.25)';
-      for (let y = -H / 2; y <= H / 2; y += 2.5) for (let x = -W / 2; x <= W / 2; x += 2.5) { const big = x % 5 === 0 && y % 5 === 0; ctx.fillRect(x - (big ? 0.18 : 0.1), y - (big ? 0.18 : 0.1), big ? 0.36 : 0.2, big ? 0.36 : 0.2); }
-      ctx.strokeStyle = 'rgba(106,92,255,.35)'; ctx.lineWidth = 0.15;
-      ctx.beginPath(); ctx.moveTo(-2, 0); ctx.lineTo(2, 0); ctx.moveTo(0, -2); ctx.lineTo(0, 2); ctx.stroke();
-      registerCustom([{ ...def, id: '__edit' }]);
-      const pen = new CanvasPen(ctx, 0.3);
-      drawSymbol(pen, { type: '__edit', x: 0, y: 0, rot: 0 }, '#16161a');
-      if (drag && drag.preview) drawSymbol(pen, { type: '__prev', x: 0, y: 0 }, SEL);
-      for (const [x, y, n] of def.pins) {
-        ctx.fillStyle = '#e5384b'; ctx.beginPath(); ctx.arc(x, y, 0.8, 0, 7); ctx.fill();
-        pen.text(x + 1.2, y - 1, n || '', 2, 'left', '#e5384b');
-      }
-    };
-    const preview = (op) => { registerCustom([{ id: '__prev', name: '', pins: [], ops: [op] }]); drag.preview = true; };
-    const mkOp = (a, b) => {
-      const [x0, y0] = a, [x1, y1] = b;
-      if (tool === 'l') return ['l', x0, y0, x1, y1];
-      if (tool === 'r') return ['r', Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0), false];
-      if (tool === 'c') return ['c', x0, y0, Math.max(0.5, Math.hypot(x1 - x0, y1 - y0)), false];
-      return null;
-    };
-    cv.addEventListener('pointerdown', async (e) => {
-      e.preventDefault();
-      try { cv.setPointerCapture(e.pointerId); } catch (x) { /* */ }
-      const [x, y] = toMm(e);
-      const g = 1.25;
-      if (tool === 'pin') {
-        hist.push(JSON.stringify(def));
-        def.pins.push([sn(x, 5), sn(y, 5), String(def.pins.length + 1)]);
-        paintEd(); return;
-      }
-      if (tool === 't') {
-        const t = await prompt('Text im Symbol', '', { placeholder: 'z. B. M, ~, 3~', okLabel: 'Setzen' });
-        if (t) { hist.push(JSON.stringify(def)); def.ops.push(['t', sn(x, g), sn(y, g), t, 3]); paintEd(); }
-        return;
-      }
-      if (tool === 'x') {
-        // nächstes Element entfernen
-        let best = -1, bd = 2.5, pin = false;
-        def.pins.forEach(([px, py], i) => { const dd = Math.hypot(px - x, py - y); if (dd < bd) { bd = dd; best = i; pin = true; } });
-        def.ops.forEach((op, i) => {
-          let dd = Infinity;
-          if (op[0] === 'l' || op[0] === 'd') dd = segDist(x, y, op[1], op[2], op[3], op[4]);
-          else if (op[0] === 'r') dd = Math.min(segDist(x, y, op[1], op[2], op[1] + op[3], op[2]), segDist(x, y, op[1], op[2] + op[4], op[1] + op[3], op[2] + op[4]), segDist(x, y, op[1], op[2], op[1], op[2] + op[4]), segDist(x, y, op[1] + op[3], op[2], op[1] + op[3], op[2] + op[4]));
-          else if (op[0] === 'c' || op[0] === 'a') dd = Math.abs(Math.hypot(x - op[1], y - op[2]) - op[3]);
-          else if (op[0] === 't') dd = Math.hypot(x - op[1], y - op[2]);
-          else if (op[0] === 'p') for (let k = 0; k + 2 < op[1].length; k += 2) dd = Math.min(dd, segDist(x, y, op[1][k], op[1][k + 1], op[1][k + 2], op[1][k + 3]));
-          if (dd < bd) { bd = dd; best = i; pin = false; }
-        });
-        if (best >= 0) { hist.push(JSON.stringify(def)); if (pin) def.pins.splice(best, 1); else def.ops.splice(best, 1); paintEd(); }
-        return;
-      }
-      drag = { a: [sn(x, g), sn(y, g)] };
+    const r = await openSymbolEditor({
+      def, title: !existing ? 'Neues Bauteil' : builtin ? 'Bauteil bearbeiten (Kopie)' : 'Bauteil bearbeiten',
+      canDelete: !!existing && !builtin, fromBuiltin: builtin ? existing.name : '', fromPart: !!part,
     });
-    cv.addEventListener('pointermove', (e) => {
-      if (!drag) return;
-      const [x, y] = toMm(e);
-      const op = mkOp(drag.a, [sn(x, 1.25), sn(y, 1.25)]);
-      if (op) { preview(op); paintEd(); }
-    });
-    cv.addEventListener('pointerup', (e) => {
-      if (!drag) return;
-      const [x, y] = toMm(e);
-      const op = mkOp(drag.a, [sn(x, 1.25), sn(y, 1.25)]);
-      drag = null;
-      if (op && !(op[0] === 'l' && op[1] === op[3] && op[2] === op[4]) && !(op[0] === 'r' && (!op[3] || !op[4]))) { hist.push(JSON.stringify(def)); def.ops.push(op); }
-      paintEd();
-    });
-    cv.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
-    const toolSeg = el('div', { class: 'seg' }, [['l', 'Linie'], ['r', 'Rechteck'], ['c', 'Kreis'], ['t', 'Text'], ['pin', 'Anschluss'], ['x', 'Löschen']].map(([k, l]) => {
-      const b = el('button', { type: 'button', class: k === tool ? 'on' : '' }, l);
-      b.addEventListener('click', () => { tool = k; toolSeg.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); });
-      return b;
-    }));
-    const undoBtn = el('button', { class: 'ctx-btn', type: 'button', onclick: () => { const h = hist.pop(); if (h) { Object.assign(def, JSON.parse(h)); paintEd(); } } }, 'Rückgängig');
-    const tplSel = el('select', { class: 'inp' }, el('option', { value: '' }, 'Leer beginnen'),
-      Object.entries(allSymbols()).filter(([k, v]) => !v.custom && k !== '__edit' && k !== '__prev').map(([k, v]) => el('option', { value: k }, `${v.cat}: ${v.name}`)));
-    tplSel.addEventListener('change', () => {
-      const t = getSym(tplSel.value);
-      if (!t) return;
-      hist.push(JSON.stringify(def));
-      def.ops = JSON.parse(JSON.stringify(t.ops)); def.pins = JSON.parse(JSON.stringify(t.pins));
-      if (!name.value) name.value = t.name + ' (eigen)';
-      prefix.value = t.prefix || prefix.value; kind.value = t.kind && ['no', 'nc', 'co', 'coil'].includes(t.kind) ? t.kind : '';
-      paintEd();
-    });
-    const name = el('input', { class: 'inp', type: 'text', value: def.name, placeholder: 'z. B. Lichtschranke' });
-    const prefix = el('input', { class: 'inp', type: 'text', value: def.prefix, placeholder: 'z. B. B', maxlength: '3' });
-    const val = el('input', { class: 'inp', type: 'text', value: def.val, placeholder: 'optional' });
-    const kind = el('select', { class: 'inp' }, [['', 'Allgemein'], ['no', 'Schließer (Kontakt)'], ['nc', 'Öffner (Kontakt)'], ['co', 'Wechsler (Kontakt)'], ['coil', 'Spule (Kontaktspiegel)']].map(([v, l]) => el('option', { value: v, selected: def.kind === v ? true : null }, l)));
-    const fld = (l, n) => el('div', { class: 'field' }, el('div', { class: 'field-label' }, l), n);
-    const buttons = [{ label: 'Abbrechen', value: null }];
-    if (existing) buttons.push({ label: 'Löschen', value: 'del', danger: true });
-    buttons.push({ label: 'Speichern', primary: true, value: () => {
-      if (!name.value.trim()) { name.focus(); toast('Bitte einen Namen eingeben'); return undefined; }
-      if (!def.ops.length) { toast('Bitte zuerst etwas zeichnen'); return undefined; }
-      return 'save';
-    } });
-    const r = await dialog({
-      title: existing ? 'Bauteil bearbeiten' : 'Eigenes Bauteil', wide: true,
-      body: el('div', { class: 'symed' },
-        el('div', { class: 'symed-bar' }, toolSeg, undoBtn),
-        cv,
-        el('p', { class: 'field-hint' }, 'Ziehen zeichnet Linien, Rechtecke und Kreise. Anschlüsse (rot) rasten im 5-mm-Raster ein – dort werden Leitungen angeschlossen. Das Kreuz ist die Mitte.'),
-        el('div', { class: 'form-grid' }, fld('Name', name), fld('Kennbuchstabe (BMK)', prefix), fld('Art', kind), fld('Standardwert', val), existing ? null : fld('Vorlage', tplSel))),
-      buttons,
-      onOpen: () => setTimeout(paintEd, 30),
-    });
-    unregisterCustom('__edit'); unregisterCustom('__prev');
+    if (!r) return;
     const list = (getSettings().schCustom || []).filter((c) => c.id !== def.id);
-    if (r === 'del') {
-      if (!(await confirm('Bauteil löschen?', `„${def.name}“ aus deiner Bibliothek entfernen? Bereits gezeichnete Pläne behalten es.`, 'Löschen', true))) return;
+    if (r.action === 'del') {
       saveSettings({ schCustom: list });
       unregisterCustom(def.id);
       registerCustom(this.nb.schSymbols || []);
       this.fillLib(''); this.draw();
       return;
     }
-    if (r !== 'save') return;
-    Object.assign(def, { name: name.value.trim(), prefix: prefix.value.trim().replace(/^-/, '').toUpperCase(), val: val.value.trim(), kind: kind.value || undefined });
-    saveSettings({ schCustom: [...list, def] });
-    registerCustom([def]);
-    if ((this.nb.schSymbols || []).some((c) => c.id === def.id)) this.nb.schSymbols = this.nb.schSymbols.map((c) => (c.id === def.id ? def : c));
+    const nd = r.def;
+    if (!nd.kind) delete nd.kind;
+    saveSettings({ schCustom: [...list, nd] });
+    registerCustom([nd]);
+    const before = this.snap();
+    let changedPlan = false;
+    if ((this.nb.schSymbols || []).some((c) => c.id === nd.id)) { this.nb.schSymbols = this.nb.schSymbols.map((c) => (c.id === nd.id ? nd : c)); changedPlan = true; }
+    if (part && part.type !== nd.id) {
+      // platziertes Bauteil (und auf Wunsch alle gleichen) durch das neue Symbol ersetzen
+      const old = part.type;
+      const targets = r.applyAll ? this.sheets().flatMap((x) => x.parts).filter((p) => p.type === old) : [part];
+      for (const p of targets) { p.type = nd.id; if (p.pl && p.pl.length !== nd.pins.length) delete p.pl; }
+      this.nb.schSymbols = [...(this.nb.schSymbols || []).filter((c) => c.id !== nd.id), nd];
+      changedPlan = true;
+    }
     this.A = null;
     this.fillLib('');
-    this.saveSoon();
-    this.draw();
-    toast(`„${def.name}“ gespeichert – unter „Eigene Bauteile“`);
+    if (changedPlan) this.commit(before); else { this.saveSoon(); this.draw(); }
+    toast(`„${nd.name}“ gespeichert – unter „Eigene Bauteile“`);
   }
 
   // ------------------------------------------------------------ Prüfen

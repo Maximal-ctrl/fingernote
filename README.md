@@ -24,6 +24,9 @@ Schlicht, modern, offline. Kein Abo, keine Werbung.
   Über 100 Symbole (Umfang wie im Fachkunde-Elektrotechnik-Buch), **eigene Bauteile** im Baukasten,
   Bauteile **sperren** (Schloss), **Lasso**, **Stift & Radierer** zum Hineinzeichnen, Kontaktnummern frei änderbar,
   Schriftfeld per Antippen bearbeiten, 2/3-Finger-Tippen = Rückgängig/Wiederholen
+  **Bauteil-Editor** (Vollbild, wie in CAD-Programmen): Linie, Linienzug, Rechteck, Kreis, Bogen, Freihand, Text,
+  Anschlusspunkte mit Bezeichnung, Radierer, Auswahl mit Griffen, Fangen an Raster und Endpunkten, Drehen/Spiegeln,
+  Rückgängig – jedes vorhandene Bauteil lässt sich als Kopie komplett umzeichnen; Blattrahmen mit Spalten 1…n und Zeilen A…F
   **Siemens-SPS** im Stromlaufplan: LOGO! (24 V / 230 V, DM8, AM2), S7-1200 (CPU 1212C/1214C, SM 1221/1222/1231/1232),
   S7-1500 (CPU 1511, DI/DQ/AI-Baugruppen), SITOP, ET 200SP – mit normgerechten Anschlussnamen (I0.0, Q0.0, 1M, L+, M …)
 - **Schaltschrank-Aufbauplan** (neue Buchart): Montageplatte, **Hutschiene TS35/TS15** (Schlitze nach Norm),
@@ -34,6 +37,10 @@ Schlicht, modern, offline. Kein Abo, keine Werbung.
   (Steckdosen, Aus-/Serien-/Wechsel-/Kreuzschalter, Leuchten, Verteiler, Rauchmelder, LAN/TV/TAE …),
   Leitungen mit Aderzahl und Bezeichnung (z. B. NYM-J 3×1,5), Maßstab im Schriftfeld
 - **PDFs** als Buch importieren oder in ein Buch einfügen – jede Seite direkt beschreibbar
+- **Import aus OneNote** (über das Microsoft-Konto): alle Notizbücher, Abschnittsgruppen und Abschnitte als
+  Ordner und Bücher – mit Text (Überschriften, Listen, Checklisten, Tabellen), Bildern und Handschrift
+- **Import aus GoodNotes & Co.:** PDF-Exporte, Bilder, ZIP-Archive (Ordnerstruktur bleibt erhalten) und
+  .goodnotes-Dateien (enthaltene PDFs/Bilder)
 - **Bilder** einfügen, **sperren**, **vor oder hinter den Text** legen
 - Stift (druckempfindlich), Fineliner, Regenbogen, **Lieblingsstifte**, **Pipette**
 - Textmarker unter der Schrift, Formerkennung durch Halten, **Wegkritzeln zum Löschen**
